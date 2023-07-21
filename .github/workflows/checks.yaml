@@ -1,18 +1,51 @@
-name: PR Checks
+name: Checks
 
 on:
+  push:
+    branches: ['release-orange']
   pull_request:
-    types: [opened, labeled, unlabeled, synchronize]
+    branches: ['release-orange']
 
 jobs:
-  release-label:
-    name: Release note label
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check minimum labels
-        uses: mheap/github-action-required-labels@v5
+      - name: Checkout repository
+        uses: actions/checkout@c85c95e3d7251135ab7dc9ce3241c5835cc595a9 # v3.5.3
+
+      - name: Set up Go
+        uses: actions/setup-go@fac708d6674e30b6ba41289acaab6d4b75aa0753 # v4.0.1
         with:
-          mode: minimum
-          count: 1
-          labels: "release-note/ignore, kind/feature, release-note/new-feature, kind/enhancement, release-note/enhancement, kind/bug, release-note/bug-fix, release-note/breaking-change, release-note/deprecation, area/dependencies, release-note/dependency-update"
+          go-version: "1.20"
+
+      - name: Download golangci-lint
+        run: make bin/golangci-lint
+
+      - name: Lint
+        run: make lint
+
+  security-scan:
+    name: Trivy vulnerability scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@41f05d9ecffa2ed3f1580af306000f734b733e54 # 0.11.2
+        with:
+          #input: image
+          scan-type: 'fs'
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy scan results as artifact
+        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce # v3.1.2
+        with:
+          name: "[${{ github.job }}] Trivy scan results"
+          path: trivy-results.sarif
+          retention-days: 5
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@f6e388ebf0efc915c6c5b165b019ee61a6746a38 # v2.20.1
+        with:
+          sarif_file: trivy-results.sarif
