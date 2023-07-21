@@ -2,11 +2,9 @@ name: Checks
 
 on:
   push:
-    branches:
-    - '**'
+    branches: ['release-orange']
   pull_request:
-    branches:
-    - '**'
+    branches: ['release-orange']
 
 jobs:
   lint:
