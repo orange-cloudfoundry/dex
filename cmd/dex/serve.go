@@ -253,6 +253,10 @@ func runServe(options serveOptions) error {
 		logger.Infof("config allowed origins: %s", c.Web.AllowedOrigins)
 	}
 
+	if len(c.Web.FrameAncestors) > 0 {
+		logger.Infof("config allowed frame ancestors: %s", c.Web.FrameAncestors)
+	}
+
 	// explicitly convert to UTC.
 	now := func() time.Time { return time.Now().UTC() }
 
