@@ -367,9 +367,9 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 	// Buffer size middleware
         bufferSizeMidldleware := func(next http.Handler) http.Handler {
                 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                        w := bufio.NewWriterSize(w, 4096*2)
-                        if w.Buffered() > 0 {
-                                w.Flush()
+                        pw := bufio.NewWriterSize(w, 4096*2)
+                        if pw.Buffered() > 0 {
+                                pw.Flush()
                         }
                         next.ServeHTTP(w, r)
                 })
