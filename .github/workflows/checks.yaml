@@ -5,8 +5,7 @@ on:
     branches: 
     - '**'
   pull_request:
-    branches:
-    - '**'
+    branches: ['release-orange']
 
 jobs:
   lint:
