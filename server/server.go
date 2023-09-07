@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"crypto/rsa"
 	"encoding/json"
@@ -367,9 +368,9 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
         bufferSizeMidldleware := func(next http.Handler) http.Handler {
                 return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
                         w := bufio.NewWriterSize(w, 4096*2)
-                        if w.Buffered() > 0 {
-                                w.Flush()
-                        }
+			if w.Buffered() > 0{
+				w.Flush()
+			}
                         next.ServeHTTP(w, r)
                 })
         }
