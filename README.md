@@ -104,10 +104,6 @@ All changes or deprecations of connector features will be announced in the [rele
 * Client libraries
   * [Go][go-oidc]
 
-## Reporting a vulnerability
-
-Please see our [security policy](.github/SECURITY.md) for details about reporting vulnerabilities.
-
 ## Getting help
 
 - For feature requests and bugs, file an [issue](https://github.com/dexidp/dex/issues).
