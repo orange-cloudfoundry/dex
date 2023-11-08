@@ -364,19 +364,19 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 		})
 	}
 
-        // Buffer size middleware
-        bufferSizeMidldleware := func(next http.Handler) http.Handler {
-                return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                        pw := bufio.NewWriterSize(w, 4096*2)
-			if pw.Buffered() > 0{
+	// Buffer size middleware
+	bufferSizeMidldleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			pw := bufio.NewWriterSize(w, 4096*2)
+			if pw.Buffered() > 0 {
 				pw.Flush()
 			}
-                        next.ServeHTTP(w, r)
-                })
-        }
+			next.ServeHTTP(w, r)
+		})
+	}
 
-        r := mux.NewRouter().SkipClean(true).UseEncodedPath()
-        r.Use(bufferSizeMidldleware)
+	r := mux.NewRouter().SkipClean(true).UseEncodedPath()
+	r.Use(bufferSizeMidldleware)
 	r.Use(frameAncestorsMidldleware)
 	handle := func(p string, h http.Handler) {
 		r.Handle(path.Join(issuerURL.Path, p), instrumentHandlerCounter(p, h))
