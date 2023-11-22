@@ -42,6 +42,11 @@ type Config struct {
 
 	Scopes []string `json:"scopes"` // defaults to "profile" and "email"
 
+	PKCE struct {
+		// Configurable key which controls if pkce challenge should be created or not
+		Enabled bool `json:"enabled"` // defaults to "false"
+	} `json:"pkce"`
+
 	// HostedDomains was an optional list of whitelisted domains when using the OIDC connector with Google.
 	// Only users from a whitelisted domain were allowed to log in.
 	// Support for this option was removed from the OIDC connector.
@@ -269,6 +274,12 @@ func (c *Config) Open(id string, logger *slog.Logger) (conn connector.Connector,
 		}
 	}
 
+	// pkce
+	pkceVerifier := ""
+	if c.PKCE.Enabled {
+		pkceVerifier = oauth2.GenerateVerifier()
+	}
+
 	clientID := c.ClientID
 	return &oidcConnector{
 		provider:    provider,
@@ -285,6 +296,7 @@ func (c *Config) Open(id string, logger *slog.Logger) (conn connector.Connector,
 			&oidc.Config{ClientID: clientID},
 		),
 		logger:                    logger.With(slog.Group("connector", "type", "oidc", "id", id)),
+		pkceVerifier:              pkceVerifier,
 		cancel:                    cancel,
 		httpClient:                httpClient,
 		insecureSkipEmailVerified: c.InsecureSkipEmailVerified,
@@ -314,6 +326,7 @@ type oidcConnector struct {
 	redirectURI               string
 	oauth2Config              *oauth2.Config
 	verifier                  *oidc.IDTokenVerifier
+	pkceVerifier              string
 	cancel                    context.CancelFunc
 	logger                    *slog.Logger
 	httpClient                *http.Client
@@ -352,6 +365,10 @@ func (c *oidcConnector) LoginURL(s connector.Scopes, callbackURL, state string) 
 
 	if s.OfflineAccess {
 		opts = append(opts, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", c.promptType))
+	}
+
+	if c.pkceVerifier != "" {
+		opts = append(opts, oauth2.S256ChallengeOption(c.pkceVerifier))
 	}
 	return c.oauth2Config.AuthCodeURL(state, opts...), nil
 }
@@ -431,7 +448,13 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 	token := &oauth2.Token{}
 	if q.Has("code") {
 		// exchange code to token
-		token, err = c.oauth2Config.Exchange(ctx, q.Get("code"))
+		var opts []oauth2.AuthCodeOption
+
+		if c.pkceVerifier != "" {
+			opts = append(opts, oauth2.VerifierOption(c.pkceVerifier))
+		}
+
+		token, err = c.oauth2Config.Exchange(ctx, q.Get("code"), opts...)
 		if err != nil {
 			return identity, fmt.Errorf("oidc: failed to get token: %v", err)
 		}
@@ -442,7 +465,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 			return identity, err
 		}
 	}
-	return c.createIdentity(ctx, identity, token, createCaller) // should be an exchangeCaller for client_credentials
+	return c.createIdentity(ctx, identity, token, createCaller)
 }
 
 // Refresh is used to refresh a session with the refresh token provided by the IdP

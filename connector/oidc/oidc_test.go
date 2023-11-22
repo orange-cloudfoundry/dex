@@ -66,6 +66,7 @@ func TestHandleCallback(t *testing.T) {
 		token                     map[string]interface{}
 		groupsRegex               string
 		newGroupFromClaims        []NewGroupFromClaims
+		pkce                      bool
 	}{
 		{
 			name:               "simpleCase",
@@ -348,7 +349,6 @@ func TestHandleCallback(t *testing.T) {
 					Prefix:    "bk",
 				},
 			},
-
 			token: map[string]interface{}{
 				"sub":                  "subvalue",
 				"name":                 "namevalue",
@@ -381,6 +381,40 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+		},
+		{
+			name:               "withPKCE",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       []string{"group1", "group2"},
+			expectedEmailField: "emailvalue",
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"groups":         []string{"group1", "group2"},
+				"email":          "emailvalue",
+				"email_verified": true,
+			},
+			pkce: true,
+		},
+		{
+			name:               "withoutPKCE",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       []string{"group1", "group2"},
+			expectedEmailField: "emailvalue",
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"groups":         []string{"group1", "group2"},
+				"email":          "emailvalue",
+				"email_verified": true,
+			},
+			pkce: false,
 		},
 	}
 
@@ -419,6 +453,7 @@ func TestHandleCallback(t *testing.T) {
 			config.ClaimMapping.GroupsKey = tc.groupsKey
 			config.ClaimMutations.NewGroupFromClaims = tc.newGroupFromClaims
 			config.ClaimMutations.FilterGroupClaims.GroupsFilter = tc.groupsRegex
+			config.PKCE.Enabled = tc.pkce
 
 			conn, err := newConnector(config)
 			if err != nil {
