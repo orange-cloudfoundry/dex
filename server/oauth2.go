@@ -93,7 +93,7 @@ func tokenErr(w http.ResponseWriter, typ, description string, statusCode int) er
 	return nil
 }
 
-//nolint
+// nolint
 const (
 	errInvalidRequest          = "invalid_request"
 	errUnauthorizedClient      = "unauthorized_client"
@@ -132,6 +132,7 @@ const (
 	grantTypeImplicit          = "implicit"
 	grantTypePassword          = "password"
 	grantTypeDeviceCode        = "urn:ietf:params:oauth:grant-type:device_code"
+	grantTypeClientCredentials = "client_credentials"
 )
 
 const (
