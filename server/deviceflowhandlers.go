@@ -90,7 +90,7 @@ func (s *Server) handleDeviceCode(w http.ResponseWriter, r *http.Request) {
 		// Make device code
 		deviceCode := storage.NewDeviceCode()
 
-		// make user code
+		// Make user code
 		userCode := storage.NewUserCode()
 
 		// Generate the expire time
@@ -432,7 +432,7 @@ func (s *Server) verifyUserCode(w http.ResponseWriter, r *http.Request) {
 		q.Set("client_secret", deviceRequest.ClientSecret)
 		q.Set("state", deviceRequest.UserCode)
 		q.Set("response_type", "code")
-		q.Set("redirect_uri", "/device/callback")
+		q.Set("redirect_uri", fmt.Sprintf("%s/device/callback", s.issuerURL.Path))
 		q.Set("scope", strings.Join(deviceRequest.Scopes, " "))
 		u.RawQuery = q.Encode()
 

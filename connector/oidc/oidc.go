@@ -313,8 +313,7 @@ func (c *oidcConnector) getTokenViaClientCredentials() (token *oauth2.Token, err
 
 	token = &oauth2.Token{
 		AccessToken: response.AccessToken,
-		// TokenType:   "urn:ietf:params:oauth:token-type:id_token",
-		Expiry: time.Now().Add(time.Second * time.Duration(response.ExpiresIn)),
+		Expiry:      time.Now().Add(time.Second * time.Duration(response.ExpiresIn)),
 	}
 	raw := make(map[string]interface{})
 	json.Unmarshal(body, &raw) // no error checks for optional fields
