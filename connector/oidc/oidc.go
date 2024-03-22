@@ -329,7 +329,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 	}
 
 	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, c.httpClient)
-	token := &oauth2.Token{}
+	var token *oauth2.Token
 	if q.Has("code") {
 		// exchange code to token
 		var opts []oauth2.AuthCodeOption
