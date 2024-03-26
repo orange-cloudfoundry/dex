@@ -435,7 +435,6 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 		}
 	} else {
 		// get token via client_credentials
-		c.logger.Debugf("Getting a token via client_credentials")
 		token, err = c.getTokenViaClientCredentials()
 		if err != nil {
 			return identity, err
