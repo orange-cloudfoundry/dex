@@ -429,7 +429,7 @@ func (s *Server) handleClientCredentials(w http.ResponseWriter, r *http.Request,
 		Groups:            identity.Groups,
 	}
 
-	accessToken, err := s.newAccessToken(client.ID, claims, scopes, nonce, connID)
+	accessToken, _, err := s.newAccessToken(client.ID, claims, scopes, nonce, connID)
 	if err != nil {
 		s.logger.Errorf("client grant failed to create new access token: %v", err)
 		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)

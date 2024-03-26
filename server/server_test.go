@@ -106,6 +106,7 @@ func newTestServer(ctx context.Context, t *testing.T, updateConfig func(c *Confi
 			grantTypeTokenExchange,
 			grantTypeImplicit,
 			grantTypePassword,
+			grantTypeClientCredentials,
 		},
 	}
 	if updateConfig != nil {
