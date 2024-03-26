@@ -145,9 +145,23 @@ func runServe(options serveOptions) error {
 		tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
 	}
 
+	allowedTLSVersions := map[string]int{
+		"1.2": tls.VersionTLS12,
+		"1.3": tls.VersionTLS13,
+	}
+
 	if c.GRPC.TLSCert != "" {
+		tlsMinVersion := tls.VersionTLS12
+		if c.GRPC.TLSMinVersion != "" {
+			tlsMinVersion = allowedTLSVersions[c.GRPC.TLSMinVersion]
+		}
+		tlsMaxVersion := 0 // default for max is whatever Go defaults to
+		if c.GRPC.TLSMaxVersion != "" {
+			tlsMaxVersion = allowedTLSVersions[c.GRPC.TLSMaxVersion]
+		}
 		baseTLSConfig := &tls.Config{
-			MinVersion:               tls.VersionTLS12,
+			MinVersion:               uint16(tlsMinVersion),
+			MaxVersion:               uint16(tlsMaxVersion),
 			CipherSuites:             allowedTLSCiphers,
 			PreferServerCipherSuites: true,
 		}
@@ -259,11 +273,14 @@ func runServe(options serveOptions) error {
 	healthChecker := gosundheit.New()
 
 	serverConfig := server.Config{
+		AllowedGrantTypes:      c.OAuth2.GrantTypes,
 		SupportedResponseTypes: c.OAuth2.ResponseTypes,
 		SkipApprovalScreen:     c.OAuth2.SkipApprovalScreen,
 		AlwaysShowLoginScreen:  c.OAuth2.AlwaysShowLoginScreen,
 		PasswordConnector:      c.OAuth2.PasswordConnector,
+		Headers:                c.Web.Headers.ToHTTPHeader(),
 		AllowedOrigins:         c.Web.AllowedOrigins,
+		AllowedHeaders:         c.Web.AllowedHeaders,
 		Issuer:                 c.Issuer,
 		Storage:                s,
 		Web:                    c.Frontend,
@@ -420,8 +437,18 @@ func runServe(options serveOptions) error {
 			return fmt.Errorf("listening (%s) on %s: %v", name, c.Web.HTTPS, err)
 		}
 
+		tlsMinVersion := tls.VersionTLS12
+		if c.Web.TLSMinVersion != "" {
+			tlsMinVersion = allowedTLSVersions[c.Web.TLSMinVersion]
+		}
+		tlsMaxVersion := 0 // default for max is whatever Go defaults to
+		if c.Web.TLSMaxVersion != "" {
+			tlsMaxVersion = allowedTLSVersions[c.Web.TLSMaxVersion]
+		}
+
 		baseTLSConfig := &tls.Config{
-			MinVersion:               tls.VersionTLS12,
+			MinVersion:               uint16(tlsMinVersion),
+			MaxVersion:               uint16(tlsMaxVersion),
 			CipherSuites:             allowedTLSCiphers,
 			PreferServerCipherSuites: true,
 		}
@@ -550,6 +577,17 @@ func applyConfigOverrides(options serveOptions, config *Config) {
 	if config.Frontend.Dir == "" {
 		config.Frontend.Dir = os.Getenv("DEX_FRONTEND_DIR")
 	}
+
+	if len(config.OAuth2.GrantTypes) == 0 {
+		config.OAuth2.GrantTypes = []string{
+			"authorization_code",
+			"implicit",
+			"password",
+			"refresh_token",
+			"urn:ietf:params:oauth:grant-type:device_code",
+			"urn:ietf:params:oauth:grant-type:token-exchange",
+		}
+	}
 }
 
 func pprofHandler(router *http.ServeMux) {
@@ -634,17 +672,16 @@ func newTLSReloader(logger log.Logger, certFile, keyFile, caFile string, baseCon
 		}
 	}()
 
-	conf := &tls.Config{}
 	// https://pkg.go.dev/crypto/tls#baseConfig
 	// Server configurations must set one of Certificates, GetCertificate or GetConfigForClient.
 	if caFile != "" {
 		// grpc will use this via tls.Server for mTLS
-		conf.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) { return ptr.Load(), nil }
+		initialConfig.GetConfigForClient = func(chi *tls.ClientHelloInfo) (*tls.Config, error) { return ptr.Load(), nil }
 	} else {
 		// net/http only uses Certificates or GetCertificate
-		conf.GetCertificate = func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) { return &ptr.Load().Certificates[0], nil }
+		initialConfig.GetCertificate = func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) { return &ptr.Load().Certificates[0], nil }
 	}
-	return conf, nil
+	return initialConfig, nil
 }
 
 // loadTLSConfig loads the given file paths into a [tls.Config]

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/square/go-jose.v2"
+	"github.com/go-jose/go-jose/v4"
 
 	"github.com/dexidp/dex/storage"
 	"github.com/dexidp/dex/storage/memory"
@@ -290,7 +290,7 @@ func TestParseAuthorizationRequest(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		func() {
+		t.Run(tc.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -343,7 +343,7 @@ func TestParseAuthorizationRequest(t *testing.T) {
 					t.Fatalf("%s: unsupported error type", tc.name)
 				}
 			}
-		}()
+		})
 	}
 }
 
