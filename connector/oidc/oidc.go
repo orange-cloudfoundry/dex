@@ -375,12 +375,12 @@ func (c *oidcConnector) getTokenViaClientCredentials(s connector.Scopes) (token 
 	// extract clientID & clientSecret from scopes
 	for _, data := range s.Other {
 		if strings.Contains(data, "id-") {
-			tokens := strings.Split(data, "id-")
-			clientID = tokens[len(tokens)-1]
+			scopeTokens := strings.Split(data, "id-")
+			clientID = scopeTokens[len(scopeTokens)-1]
 		}
 		if strings.Contains(data, "secret-") {
-			tokens := strings.Split(data, "secret-")
-			clientSecret = tokens[len(tokens)-1]
+			scopeTokens := strings.Split(data, "secret-")
+			clientSecret = scopeTokens[len(scopeTokens)-1]
 		}
 	}
 

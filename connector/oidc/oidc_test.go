@@ -461,6 +461,169 @@ func TestHandleCallback(t *testing.T) {
 	}
 }
 
+func TestHandleClientCredentialsCallback(t *testing.T) {
+	t.Helper()
+
+	tests := []struct {
+		name                      string
+		clientID                  string
+		clientSecret              string
+		userIDKey                 string
+		userNameKey               string
+		overrideClaimMapping      bool
+		preferredUsernameKey      string
+		emailKey                  string
+		groupsKey                 string
+		insecureSkipEmailVerified bool
+		scopes                    []string
+		expectUserID              string
+		expectUserName            string
+		expectGroups              []string
+		expectPreferredUsername   string
+		expectedEmailField        string
+		token                     map[string]interface{}
+		newGroupFromClaims        []NewGroupFromClaims
+		expectedHandlerError      error
+	}{
+		{
+			name:               "withCorrectScopes",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			clientID:           "", // not configured
+			clientSecret:       "", // not configured
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       nil,
+			expectedEmailField: "emailvalue",
+			scopes:             []string{"openid", "id-clientidvalue", "secret-clientsecretvalue"},
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"email":          "emailvalue",
+				"email_verified": false,
+			},
+			expectedHandlerError: nil,
+		},
+		{
+			name:               "withCorrectScopesAndConfiguredClientCredentials",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			clientID:           "defaultClientID",
+			clientSecret:       "defaultClientSecret",
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       nil,
+			expectedEmailField: "emailvalue",
+			scopes:             []string{"openid", "id-clientidvalue", "secret-clientsecretvalue"},
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"email":          "emailvalue",
+				"email_verified": false,
+			},
+			expectedHandlerError: fmt.Errorf("expected audience \"defaultClientID\""),
+		},
+		{
+			name:                 "withoutCredentials",
+			userIDKey:            "", // not configured
+			userNameKey:          "", // not configured
+			clientID:             "", // not configured
+			clientSecret:         "", // not configured
+			expectUserID:         "",
+			expectUserName:       "",
+			expectGroups:         nil,
+			expectedEmailField:   "",
+			scopes:               []string{"openid"},
+			token:                nil,
+			expectedHandlerError: fmt.Errorf("oidc: unable to parse clientID or clientSecret"),
+		},
+		{
+			name:                 "missingSingleCredentialPrefix",
+			userIDKey:            "", // not configured
+			userNameKey:          "", // not configured
+			clientID:             "", // not configured
+			clientSecret:         "", // not configured
+			expectUserID:         "",
+			expectUserName:       "",
+			expectGroups:         nil,
+			expectedEmailField:   "",
+			scopes:               []string{"openid", "id-clientidvalue", "clientsecretvalue"},
+			token:                nil,
+			expectedHandlerError: fmt.Errorf("oidc: unable to parse clientID or clientSecret"),
+		},
+		{
+			name:                 "missingBothCredentialPrefixes",
+			userIDKey:            "", // not configured
+			userNameKey:          "", // not configured
+			clientID:             "", // not configured
+			clientSecret:         "", // not configured
+			expectUserID:         "",
+			expectUserName:       "",
+			expectGroups:         nil,
+			expectedEmailField:   "",
+			scopes:               []string{"openid", "clientidvalue", "clientsecretvalue"},
+			token:                nil,
+			expectedHandlerError: fmt.Errorf("oidc: unable to parse clientID or clientSecret"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			idTokenDesired := true
+			testServer, err := setupServer(tc.token, idTokenDesired)
+			if err != nil {
+				t.Fatal("failed to setup test server", err)
+			}
+			defer testServer.Close()
+
+			serverURL := testServer.URL
+			basicAuth := true
+			config := Config{
+				Issuer:                    serverURL,
+				ClientID:                  tc.clientID,
+				ClientSecret:              tc.clientSecret,
+				Scopes:                    tc.scopes,
+				RedirectURI:               fmt.Sprintf("%s/callback", serverURL),
+				UserIDKey:                 tc.userIDKey,
+				UserNameKey:               tc.userNameKey,
+				InsecureSkipEmailVerified: tc.insecureSkipEmailVerified,
+				InsecureEnableGroups:      true,
+				BasicAuthUnsupported:      &basicAuth,
+				OverrideClaimMapping:      tc.overrideClaimMapping,
+			}
+			config.ClaimMapping.PreferredUsernameKey = tc.preferredUsernameKey
+			config.ClaimMapping.EmailKey = tc.emailKey
+			config.ClaimMapping.GroupsKey = tc.groupsKey
+			config.ClaimMutations.NewGroupFromClaims = tc.newGroupFromClaims
+
+			conn, err := newConnector(config)
+			if err != nil {
+				t.Fatal("failed to create new connector", err)
+			}
+			req, err := newRequestWithoutAuthCode(testServer.URL)
+			if err != nil {
+				t.Fatal("failed to create request", err)
+			}
+
+			// mimic the functionality of server/oauth2 parseScopes
+			s := connector.Scopes{}
+			s.Other = append(s.Other, tc.scopes...)
+
+			identity, err := conn.HandleCallback(s, req)
+			compareErrors(t, err, tc.expectedHandlerError)
+			if err != nil {
+				return
+			}
+			expectEquals(t, identity.UserID, tc.expectUserID)
+			expectEquals(t, identity.Username, tc.expectUserName)
+			expectEquals(t, identity.PreferredUsername, tc.expectPreferredUsername)
+			expectEquals(t, identity.Email, tc.expectedEmailField)
+			expectEquals(t, identity.EmailVerified, false)
+			expectEquals(t, identity.Groups, tc.expectGroups)
+		})
+	}
+}
+
 func TestRefresh(t *testing.T) {
 	t.Helper()
 
@@ -828,6 +991,15 @@ func newRequestWithAuthCode(serverURL string, code string) (*http.Request, error
 	return req, nil
 }
 
+func newRequestWithoutAuthCode(serverURL string) (*http.Request, error) {
+	req, err := http.NewRequest("GET", serverURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	return req, nil
+}
+
 func n(pub *rsa.PublicKey) string {
 	return encode(pub.N.Bytes())
 }
@@ -846,5 +1018,23 @@ func encode(payload []byte) string {
 func expectEquals(t *testing.T, a interface{}, b interface{}) {
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("Expected %+v to equal %+v", a, b)
+	}
+}
+
+func compareErrors(t *testing.T, a error, b error) {
+	if a == nil && b == nil {
+		return
+	}
+	if a == nil && b != nil {
+		t.Errorf("Expected \"%+v\" to be nil", b)
+		return
+	}
+	if a != nil && b == nil {
+		t.Errorf("Expected \"%+v\" to be \"%+v\"", b, a)
+		return
+	}
+
+	if !strings.Contains(a.Error(), b.Error()) {
+		t.Errorf("Expected \"%+v\" to be a part of \"%+v\"", b, a)
 	}
 }
