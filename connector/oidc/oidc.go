@@ -271,7 +271,7 @@ func (c *Config) Open(id string, logger log.Logger) (conn connector.Connector, e
 			RedirectURL:  c.RedirectURI,
 		},
 		verifier: provider.Verifier(
-			&oidc.Config{ClientID: clientID},
+			&oidc.Config{ClientID: clientID, SkipClientIDCheck: len(clientID) == 0},
 		),
 		pkceVerifier:              pkceVerifier,
 		logger:                    logger,
@@ -369,11 +369,30 @@ const (
 	exchangeCaller
 )
 
-func (c *oidcConnector) getTokenViaClientCredentials() (token *oauth2.Token, err error) {
+func (c *oidcConnector) getTokenViaClientCredentials(s connector.Scopes) (token *oauth2.Token, err error) {
+	var clientID, clientSecret string
+
+	// extract clientID & clientSecret from scopes
+	for _, data := range s.Other {
+		if strings.Contains(data, "id-") {
+			tokens := strings.Split(data, "id-")
+			clientID = tokens[len(tokens)-1]
+		}
+		if strings.Contains(data, "secret-") {
+			tokens := strings.Split(data, "secret-")
+			clientSecret = tokens[len(tokens)-1]
+		}
+	}
+
+	// check if parsed credentials are not empty
+	if len(clientID) == 0 || len(clientSecret) == 0 {
+		return nil, fmt.Errorf("oidc: unable to parse clientID or clientSecret")
+	}
+
 	data := url.Values{
 		"grant_type":    {"client_credentials"},
-		"client_id":     {c.oauth2Config.ClientID},
-		"client_secret": {c.oauth2Config.ClientSecret},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
 		"scope":         {strings.Join(c.oauth2Config.Scopes, " ")},
 	}
 
@@ -401,7 +420,6 @@ func (c *oidcConnector) getTokenViaClientCredentials() (token *oauth2.Token, err
 	if err = json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("oidc: unable to parse response: %v", err)
 	}
-
 	token = &oauth2.Token{
 		AccessToken: response.AccessToken,
 		Expiry:      time.Now().Add(time.Second * time.Duration(response.ExpiresIn)),
@@ -435,7 +453,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 		}
 	} else {
 		// get token via client_credentials
-		token, err = c.getTokenViaClientCredentials()
+		token, err = c.getTokenViaClientCredentials(s)
 		if err != nil {
 			return identity, err
 		}

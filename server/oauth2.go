@@ -170,6 +170,8 @@ func parseScopes(scopes []string) connector.Scopes {
 			s.OfflineAccess = true
 		case scopeGroups:
 			s.Groups = true
+		default:
+			s.Other = append(s.Other, scope)
 		}
 	}
 	return s
