@@ -271,7 +271,7 @@ func (c *Config) Open(id string, logger log.Logger) (conn connector.Connector, e
 			RedirectURL:  c.RedirectURI,
 		},
 		verifier: provider.Verifier(
-			&oidc.Config{ClientID: clientID},
+			&oidc.Config{ClientID: clientID, SkipClientIDCheck: len(clientID) == 0},
 		),
 		pkceVerifier:              pkceVerifier,
 		logger:                    logger,
@@ -369,14 +369,32 @@ const (
 	exchangeCaller
 )
 
-func (c *oidcConnector) getTokenViaClientCredentials() (token *oauth2.Token, err error) {
+func (c *oidcConnector) getTokenViaClientCredentials(r *http.Request) (token *oauth2.Token, err error) {
+	// Setup default clientID & clientSecret
+	clientID := c.oauth2Config.ClientID
+	clientSecret := c.oauth2Config.ClientSecret
+
+	// Override clientID & clientSecret if they exist!
+	q := r.Form
+	if q.Has("custom_client_id") && q.Has("custom_client_secret") {
+		clientID = q.Get("custom_client_id")
+		clientSecret = q.Get("custom_client_secret")
+	}
+
+	// Check if oauth2 credentials are not empty
+	if len(clientID) == 0 || len(clientSecret) == 0 {
+		return nil, fmt.Errorf("oidc: unable to get clientID or clientSecret")
+	}
+
+	// Construct data to be sent to the external IdP
 	data := url.Values{
 		"grant_type":    {"client_credentials"},
-		"client_id":     {c.oauth2Config.ClientID},
-		"client_secret": {c.oauth2Config.ClientSecret},
+		"client_id":     {clientID},
+		"client_secret": {clientSecret},
 		"scope":         {strings.Join(c.oauth2Config.Scopes, " ")},
 	}
 
+	// Request token from external IdP
 	resp, err := c.httpClient.PostForm(c.oauth2Config.Endpoint.TokenURL, data)
 	if err != nil {
 		return nil, fmt.Errorf("oidc: failed to get token: %v", err)
@@ -401,7 +419,6 @@ func (c *oidcConnector) getTokenViaClientCredentials() (token *oauth2.Token, err
 	if err = json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("oidc: unable to parse response: %v", err)
 	}
-
 	token = &oauth2.Token{
 		AccessToken: response.AccessToken,
 		Expiry:      time.Now().Add(time.Second * time.Duration(response.ExpiresIn)),
@@ -435,7 +452,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 		}
 	} else {
 		// get token via client_credentials
-		token, err = c.getTokenViaClientCredentials()
+		token, err = c.getTokenViaClientCredentials(r)
 		if err != nil {
 			return identity, err
 		}

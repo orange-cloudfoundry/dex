@@ -411,7 +411,7 @@ func (s *Server) handleClientCredentials(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Login
+	// Callback
 	identity, err := callbackConnector.HandleCallback(parseScopes(scopes), r)
 	if err != nil {
 		s.logger.Errorf("Failed to login user: %v", err)
