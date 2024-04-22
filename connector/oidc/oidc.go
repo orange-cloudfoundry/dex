@@ -381,9 +381,9 @@ func (c *oidcConnector) getTokenViaClientCredentials(r *http.Request) (token *oa
 		clientSecret = q.Get("custom_client_secret")
 	}
 
-	// Check if parsed credentials are not empty
+	// Check if oauth2 credentials are not empty
 	if len(clientID) == 0 || len(clientSecret) == 0 {
-		return nil, fmt.Errorf("oidc: unable to parse clientID or clientSecret")
+		return nil, fmt.Errorf("oidc: unable to get clientID or clientSecret")
 	}
 
 	// Construct data to be sent to the external IdP

@@ -424,7 +424,6 @@ func TestHandleCallback(t *testing.T) {
 			clientCredentials: false,
 		},
 		{
-
 			name:               "withCustomCredentials",
 			userIDKey:          "", // not configured
 			userNameKey:        "", // not configured
@@ -482,7 +481,7 @@ func TestHandleCallback(t *testing.T) {
 			customClientSecret:   "", // not configured in the request
 			scopes:               []string{"openid"},
 			token:                nil,
-			expectedHandlerError: fmt.Errorf("oidc: unable to parse clientID or clientSecret"),
+			expectedHandlerError: fmt.Errorf("oidc: unable to get clientID or clientSecret"),
 			clientCredentials:    true,
 		},
 		{
@@ -499,7 +498,7 @@ func TestHandleCallback(t *testing.T) {
 			customClientSecret:   "", // not configured in the request
 			scopes:               []string{"openid"},
 			token:                nil,
-			expectedHandlerError: fmt.Errorf("oidc: unable to parse clientID or clientSecret"),
+			expectedHandlerError: fmt.Errorf("oidc: unable to get clientID or clientSecret"),
 			clientCredentials:    true,
 		},
 	}
