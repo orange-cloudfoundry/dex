@@ -369,26 +369,24 @@ const (
 	exchangeCaller
 )
 
-func (c *oidcConnector) getTokenViaClientCredentials(s connector.Scopes) (token *oauth2.Token, err error) {
-	var clientID, clientSecret string
+func (c *oidcConnector) getTokenViaClientCredentials(r *http.Request) (token *oauth2.Token, err error) {
+	// Setup default clientID & clientSecret
+	clientID := c.oauth2Config.ClientID
+	clientSecret := c.oauth2Config.ClientSecret
 
-	// extract clientID & clientSecret from scopes
-	for _, data := range s.Other {
-		if strings.Contains(data, "id-") {
-			scopeTokens := strings.Split(data, "id-")
-			clientID = scopeTokens[len(scopeTokens)-1]
-		}
-		if strings.Contains(data, "secret-") {
-			scopeTokens := strings.Split(data, "secret-")
-			clientSecret = scopeTokens[len(scopeTokens)-1]
-		}
+	// Override clientID & clientSecret if they exist!
+	q := r.Form
+	if q.Has("custom_client_id") && q.Has("custom_client_secret") {
+		clientID = q.Get("custom_client_id")
+		clientSecret = q.Get("custom_client_secret")
 	}
 
-	// check if parsed credentials are not empty
+	// Check if parsed credentials are not empty
 	if len(clientID) == 0 || len(clientSecret) == 0 {
 		return nil, fmt.Errorf("oidc: unable to parse clientID or clientSecret")
 	}
 
+	// Construct data to be sent to the external IdP
 	data := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {clientID},
@@ -396,6 +394,7 @@ func (c *oidcConnector) getTokenViaClientCredentials(s connector.Scopes) (token 
 		"scope":         {strings.Join(c.oauth2Config.Scopes, " ")},
 	}
 
+	// Request token from external IdP
 	resp, err := c.httpClient.PostForm(c.oauth2Config.Endpoint.TokenURL, data)
 	if err != nil {
 		return nil, fmt.Errorf("oidc: failed to get token: %v", err)
@@ -453,7 +452,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, r *http.Request) (ide
 		}
 	} else {
 		// get token via client_credentials
-		token, err = c.getTokenViaClientCredentials(s)
+		token, err = c.getTokenViaClientCredentials(r)
 		if err != nil {
 			return identity, err
 		}
