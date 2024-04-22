@@ -853,6 +853,8 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.withClientFromStorage(w, r, s.handleAuthCode)
 	case grantTypeRefreshToken:
 		s.withClientFromStorage(w, r, s.handleRefreshToken)
+	case grantTypeClientCredentials:
+		s.withClientFromStorage(w, r, s.handleClientCredentials)
 	case grantTypePassword:
 		s.withClientFromStorage(w, r, s.handlePasswordGrant)
 	case grantTypeTokenExchange:

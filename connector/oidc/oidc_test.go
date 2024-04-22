@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -63,7 +64,14 @@ func TestHandleCallback(t *testing.T) {
 		expectPreferredUsername   string
 		expectedEmailField        string
 		token                     map[string]interface{}
+		pkce                      bool
 		newGroupFromClaims        []NewGroupFromClaims
+		expectedHandlerError      error
+		clientID                  string
+		clientSecret              string
+		customClientID            string
+		customClientSecret        string
+		clientCredentials         bool
 	}{
 		{
 			name:               "simpleCase",
@@ -80,6 +88,8 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials:    false,
+			expectedHandlerError: nil,
 		},
 		{
 			name:               "customEmailClaim",
@@ -95,6 +105,7 @@ func TestHandleCallback(t *testing.T) {
 				"mail":           "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                 "overrideWithCustomEmailClaim",
@@ -112,6 +123,7 @@ func TestHandleCallback(t *testing.T) {
 				"custommail":     "customemailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                      "email_verified not in claims, configured to be skipped",
@@ -124,6 +136,7 @@ func TestHandleCallback(t *testing.T) {
 				"name":  "namevalue",
 				"email": "emailvalue",
 			},
+			clientCredentials: false,
 		},
 		{
 			name:               "withUserIDKey",
@@ -137,6 +150,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:               "withUserNameKey",
@@ -150,6 +164,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                    "withPreferredUsernameKey",
@@ -165,6 +180,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                    "withoutPreferredUsernameKeyAndBackendReturns",
@@ -179,6 +195,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":              "emailvalue",
 				"email_verified":     true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                    "withoutPreferredUsernameKeyAndBackendNotReturn",
@@ -192,6 +209,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                      "emptyEmailScope",
@@ -205,6 +223,7 @@ func TestHandleCallback(t *testing.T) {
 				"name":      "namevalue",
 				"user_name": "username",
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                      "emptyEmailScopeButEmailProvided",
@@ -219,6 +238,7 @@ func TestHandleCallback(t *testing.T) {
 				"user_name": "username",
 				"email":     "emailvalue",
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                      "customGroupsKey",
@@ -236,6 +256,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"cognito:groups": []string{"group3", "group4"},
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                      "customGroupsKeyButGroupsProvided",
@@ -254,6 +275,7 @@ func TestHandleCallback(t *testing.T) {
 				"groups":         []string{"group1", "group2"},
 				"cognito:groups": []string{"group3", "group4"},
 			},
+			clientCredentials: false,
 		},
 		{
 			name:                      "customGroupsKeyDespiteGroupsProvidedButOverride",
@@ -273,6 +295,7 @@ func TestHandleCallback(t *testing.T) {
 				"groups":         []string{"group1", "group2"},
 				"cognito:groups": []string{"group3", "group4"},
 			},
+			clientCredentials: false,
 		},
 		{
 			name:               "singularGroupResponseAsString",
@@ -289,6 +312,7 @@ func TestHandleCallback(t *testing.T) {
 				"email":          "emailvalue",
 				"email_verified": true,
 			},
+			clientCredentials: false,
 		},
 		{
 			name:               "newGroupFromClaims",
@@ -346,7 +370,6 @@ func TestHandleCallback(t *testing.T) {
 					Prefix:    "bk",
 				},
 			},
-
 			token: map[string]interface{}{
 				"sub":                  "subvalue",
 				"name":                 "namevalue",
@@ -362,6 +385,121 @@ func TestHandleCallback(t *testing.T) {
 				},
 				"non-string-claim2": 666,
 			},
+			clientCredentials: false,
+		},
+		{
+			name:               "withPKCE",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       []string{"group1", "group2"},
+			expectedEmailField: "emailvalue",
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"groups":         []string{"group1", "group2"},
+				"email":          "emailvalue",
+				"email_verified": true,
+			},
+			pkce:              true,
+			clientCredentials: false,
+		},
+		{
+			name:               "withoutPKCE",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       []string{"group1", "group2"},
+			expectedEmailField: "emailvalue",
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"groups":         []string{"group1", "group2"},
+				"email":          "emailvalue",
+				"email_verified": true,
+			},
+			pkce:              false,
+			clientCredentials: false,
+		},
+		{
+			name:               "withCustomCredentials",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			clientID:           "", // not configured
+			clientSecret:       "", // not configured
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       nil,
+			expectedEmailField: "emailvalue",
+			customClientID:     "clientidvalue",
+			customClientSecret: "clientsecretvalue",
+			scopes:             []string{"openid"},
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"email":          "emailvalue",
+				"email_verified": true,
+			},
+			expectedHandlerError: nil,
+			clientCredentials:    true,
+		},
+		{
+			name:               "withConfiguredAndCustomCredentials",
+			userIDKey:          "", // not configured
+			userNameKey:        "", // not configured
+			clientID:           "defaultClientID",
+			clientSecret:       "defaultClientSecret",
+			expectUserID:       "subvalue",
+			expectUserName:     "namevalue",
+			expectGroups:       nil,
+			expectedEmailField: "emailvalue",
+			customClientID:     "clientidvalue",
+			customClientSecret: "clientsecretvalue",
+			scopes:             []string{"openid"},
+			token: map[string]interface{}{
+				"sub":            "subvalue",
+				"name":           "namevalue",
+				"email":          "emailvalue",
+				"email_verified": true,
+			},
+			expectedHandlerError: fmt.Errorf("expected audience \"defaultClientID\""),
+			clientCredentials:    true,
+		},
+		{
+			name:                 "withoutBothCredentials",
+			userIDKey:            "", // not configured
+			userNameKey:          "", // not configured
+			clientID:             "", // not configured
+			clientSecret:         "", // not configured
+			expectUserID:         "",
+			expectUserName:       "",
+			expectGroups:         nil,
+			expectedEmailField:   "",
+			customClientID:       "", // not configured in the request
+			customClientSecret:   "", // not configured in the request
+			scopes:               []string{"openid"},
+			token:                nil,
+			expectedHandlerError: fmt.Errorf("oidc: unable to get clientID or clientSecret"),
+			clientCredentials:    true,
+		},
+		{
+			name:                 "missingConfiguredAndASingleCustomCredential",
+			userIDKey:            "", // not configured
+			userNameKey:          "", // not configured
+			clientID:             "", // not configured
+			clientSecret:         "", // not configured
+			expectUserID:         "",
+			expectUserName:       "",
+			expectGroups:         nil,
+			expectedEmailField:   "",
+			customClientID:       "clientidvalue",
+			customClientSecret:   "", // not configured in the request
+			scopes:               []string{"openid"},
+			token:                nil,
+			expectedHandlerError: fmt.Errorf("oidc: unable to get clientID or clientSecret"),
+			clientCredentials:    true,
 		},
 	}
 
@@ -384,8 +522,8 @@ func TestHandleCallback(t *testing.T) {
 			basicAuth := true
 			config := Config{
 				Issuer:                    serverURL,
-				ClientID:                  "clientID",
-				ClientSecret:              "clientSecret",
+				ClientID:                  tc.clientID,
+				ClientSecret:              tc.clientSecret,
 				Scopes:                    scopes,
 				RedirectURI:               fmt.Sprintf("%s/callback", serverURL),
 				UserIDKey:                 tc.userIDKey,
@@ -399,22 +537,32 @@ func TestHandleCallback(t *testing.T) {
 			config.ClaimMapping.EmailKey = tc.emailKey
 			config.ClaimMapping.GroupsKey = tc.groupsKey
 			config.ClaimMutations.NewGroupFromClaims = tc.newGroupFromClaims
+			config.PKCE.Enabled = tc.pkce
 
 			conn, err := newConnector(config)
 			if err != nil {
 				t.Fatal("failed to create new connector", err)
 			}
+			var req *http.Request
+			if tc.clientCredentials {
+				req, err = newRequestWithoutAuthCode(testServer.URL)
+				data := url.Values{}
+				data.Set("custom_client_id", tc.customClientID)
+				data.Set("custom_client_secret", tc.customClientSecret)
+				req.Form = data
+			} else {
+				req, err = newRequestWithAuthCode(testServer.URL, "someCode")
+			}
 
-			req, err := newRequestWithAuthCode(testServer.URL, "someCode")
 			if err != nil {
 				t.Fatal("failed to create request", err)
 			}
 
 			identity, err := conn.HandleCallback(connector.Scopes{Groups: true}, req)
+			compareErrors(t, err, tc.expectedHandlerError)
 			if err != nil {
-				t.Fatal("handle callback failed", err)
+				return
 			}
-
 			expectEquals(t, identity.UserID, tc.expectUserID)
 			expectEquals(t, identity.Username, tc.expectUserName)
 			expectEquals(t, identity.PreferredUsername, tc.expectPreferredUsername)
@@ -792,6 +940,15 @@ func newRequestWithAuthCode(serverURL string, code string) (*http.Request, error
 	return req, nil
 }
 
+func newRequestWithoutAuthCode(serverURL string) (*http.Request, error) {
+	req, err := http.NewRequest("GET", serverURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	return req, nil
+}
+
 func n(pub *rsa.PublicKey) string {
 	return encode(pub.N.Bytes())
 }
@@ -810,5 +967,23 @@ func encode(payload []byte) string {
 func expectEquals(t *testing.T, a interface{}, b interface{}) {
 	if !reflect.DeepEqual(a, b) {
 		t.Errorf("Expected %+v to equal %+v", a, b)
+	}
+}
+
+func compareErrors(t *testing.T, a error, b error) {
+	if a == nil && b == nil {
+		return
+	}
+	if a == nil && b != nil {
+		t.Errorf("Expected \"%+v\" to be nil", b)
+		return
+	}
+	if a != nil && b == nil {
+		t.Errorf("Expected \"%+v\" to be \"%+v\"", b, a)
+		return
+	}
+
+	if !strings.Contains(a.Error(), b.Error()) {
+		t.Errorf("Expected \"%+v\" to be a part of \"%+v\"", b, a)
 	}
 }
