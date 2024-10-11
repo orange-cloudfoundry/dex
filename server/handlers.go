@@ -844,7 +844,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 
 	grantType := r.PostFormValue("grant_type")
 	if !contains(s.supportedGrantTypes, grantType) {
-		s.logger.ErrorContext(r.Context(), "unsupported grant type", "grant_type", grantType)
+		s.logger.ErrorContext(r.Context(), "unsupported grant type", "grant_type", grantType, "supportedGrantTypes", s.supportedGrantTypes)
 		s.tokenErrHelper(w, errUnsupportedGrantType, "", http.StatusBadRequest)
 		return
 	}
@@ -859,6 +859,8 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.withClientFromStorage(w, r, s.handlePasswordGrant)
 	case grantTypeTokenExchange:
 		s.withClientFromStorage(w, r, s.handleTokenExchange)
+	case grantTypeCertificate:
+		s.handleCertificateToken(w, r)
 	default:
 		s.tokenErrHelper(w, errUnsupportedGrantType, "", http.StatusBadRequest)
 	}
@@ -874,6 +876,76 @@ func (s *Server) calculateCodeChallenge(codeVerifier, codeChallengeMethod string
 	default:
 		return "", fmt.Errorf("unknown challenge method (%v)", codeChallengeMethod)
 	}
+}
+
+func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "", http.StatusBadRequest)
+		return
+	}
+	q := r.Form
+
+	nonce := q.Get("nonce")
+	if nonce == "" {
+		s.tokenErrHelper(w, errInvalidRequest, "No nonce provided", http.StatusBadRequest)
+		return
+	}
+	// Some clients, like the old go-oidc, provide extra whitespace. Tolerate this.
+	scopes := strings.Fields(q.Get("scope"))
+	// TODO check for unrecognized/invalid scopes
+
+	connID := q.Get("connector_id")
+	if connID == "" {
+		s.tokenErrHelper(w, errInvalidRequest, "No connector_id provided", http.StatusBadRequest)
+		return
+	}
+
+	conn, err := s.getConnector(connID)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Invalid connector_id", http.StatusBadRequest)
+		return
+	}
+
+	// TODO create own connector instead of the callback connector
+	certConnector, ok := conn.Connector.(connector.CallbackConnector)
+	if !ok {
+		s.tokenErrHelper(w, errInvalidRequest, "Connector doesnt not support certificate authentication", http.StatusBadRequest)
+		return
+	}
+
+	identity, err := certConnector.HandleCallback(parseScopes(scopes), r)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Invalid certificate", http.StatusBadRequest)
+		return
+	}
+
+	claims := storage.Claims{
+		UserID: identity.UserID,
+		Username: identity.Username,
+		PreferredUsername: identity.PreferredUsername,
+		Email: identity.Email,
+		EmailVerified: identity.EmailVerified,
+		Groups: identity.Groups,
+	}
+
+	accessToken, _, err := s.newAccessToken(r.Context(), q.Get("client_id"), claims, scopes, nonce, connID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "certificate grant failed to create new access token", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	idToken, expiry, err := s.newIDToken(r.Context(), q.Get("client_id"), claims, scopes, nonce, accessToken, "", connID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "certificate grant failed to create new ID token", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	// TODO: make refresh token?
+
+	resp := s.toAccessTokenResponse(idToken, accessToken, "", expiry)
+	s.writeAccessToken(w, resp)
 }
 
 // handle an access token request https://tools.ietf.org/html/rfc6749#section-4.1.3
