@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dexidp/dex/connector"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,17 +55,7 @@ func TestOpen(t *testing.T) {
 	assert.Equal(t, config.CertHeader, certConnector.certHeader, "Mismatched certHeader")
 }
 
-func TestLoginURL(t *testing.T) {
-	certConnector := &CertConnector{}
-
-	loginURL, err := certConnector.LoginURL(connector.Scopes{}, "https://example.com/auth/callback", "test-state")
-	assert.NoError(t, err, "LoginURL failed")
-
-	expected := "https://example.com/auth/callback?state=test-state"
-	assert.Equal(t, expected, loginURL, "Unexpected LoginURL")
-}
-
-func TestHandleCallback(t *testing.T) {
+func TestExtractValidateCertificate(t *testing.T) {
 	// Generate a test CA certificate
 	caCert, caPrivKey, err := generateCACertificate()
 	require.NoError(t, err, "Failed to generate CA certificate")
@@ -92,8 +81,11 @@ func TestHandleCallback(t *testing.T) {
 			},
 		}
 
-		identity, err := certConnector.HandleCallback(connector.Scopes{}, req)
-		assert.NoError(t, err, "HandleCallback failed")
+		cert, err := certConnector.ExtractCertificate(req)
+		assert.NoError(t, err, "ExtractCertificate failed")
+
+		identity, err := certConnector.ValidateCertificate(cert)
+		assert.NoError(t, err, "ValidateCertificate failed")
 		assert.Equal(t, "CUID2048", identity.UserID, "Unexpected UserID")
 	})
 	// Test with valid certificate in header
@@ -102,7 +94,10 @@ func TestHandleCallback(t *testing.T) {
 		req := httptest.NewRequest("GET", "/callback", nil)
 		req.Header.Set("X-Client-Cert", base64.StdEncoding.EncodeToString(certPEM))
 
-		identity, err := certConnector.HandleCallback(connector.Scopes{}, req)
+		cert, err := certConnector.ExtractCertificate(req)
+		assert.NoError(t, err, "ExtractCertificate failed")
+
+		identity, err := certConnector.ValidateCertificate(cert)
 		assert.NoError(t, err, "HandleCallback failed")
 		assert.Equal(t, "CUID2048", identity.UserID, "Unexpected UserID")
 	})
@@ -110,7 +105,7 @@ func TestHandleCallback(t *testing.T) {
 	t.Run("NoCertificate", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/callback", nil)
 
-		_, err := certConnector.HandleCallback(connector.Scopes{}, req)
+		_, err := certConnector.ExtractCertificate(req)
 		assert.Error(t, err, "Expected error for no certificate")
 	})
 }

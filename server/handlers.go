@@ -906,16 +906,21 @@ func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// TODO create own connector instead of the callback connector
-	certConnector, ok := conn.Connector.(connector.CallbackConnector)
+	certConnector, ok := conn.Connector.(connector.CertificateConnector)
 	if !ok {
-		s.tokenErrHelper(w, errInvalidRequest, "Connector doesnt not support certificate authentication", http.StatusBadRequest)
+		s.tokenErrHelper(w, errInvalidRequest, "Connector does not support certificate authentication", http.StatusBadRequest)
 		return
 	}
 
-	identity, err := certConnector.HandleCallback(parseScopes(scopes), r)
+	cert, err := certConnector.ExtractCertificate(r)
 	if err != nil {
 		s.tokenErrHelper(w, errInvalidRequest, "Invalid certificate", http.StatusBadRequest)
+		return
+	}
+
+	identity, err := certConnector.ValidateCertificate(cert)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Unable to validate certificate", http.StatusBadRequest)
 		return
 	}
 

@@ -1,7 +1,6 @@
 package cert
 
 import (
-	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -9,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/dexidp/dex/connector"
@@ -39,7 +37,7 @@ type CertConnector struct {
 }
 
 var (
-	_ connector.CallbackConnector = (*CertConnector)(nil)
+	_ connector.CertificateConnector = (*CertConnector)(nil)
 )
 
 // loadCACert loads the CA certificate from the file
@@ -85,33 +83,8 @@ func (c *CertConnector) Close() error {
 	return nil
 }
 
-// LoginURL implements connector.CallbackConnector
-func (c *CertConnector) LoginURL(s connector.Scopes, callbackURL, state string) (string, error) {
-	u, err := url.Parse(callbackURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse callback URL: %v", err)
-	}
-
-	q := u.Query()
-	q.Set("state", state)
-	u.RawQuery = q.Encode()
-
-	return u.String(), nil
-}
-
-// HandleCallback implements connector.CallbackConnector
-func (c *CertConnector) HandleCallback(s connector.Scopes, r *http.Request) (identity connector.Identity, err error) {
-	cert, err := c.ExtractCertificate(r)
-	if err != nil {
-		c.logger.Error("failed to extract certificate", "error", err)
-		return identity, err
-	}
-
-	return c.ValidateCertificate(r.Context(), cert)
-}
-
 // ExtractCertificate extract the client certificate from the request
-func (c *CertConnector) ExtractCertificate(r *http.Request) (*x509.Certificate, error) {
+func (c *CertConnector) ExtractCertificate(r *http.Request) (cert *x509.Certificate, err error) {
 	// Check if the certificate is in the TLS connector
 	if r.TLS != nil && len(r.TLS.PeerCertificates) > 0 {
 		return r.TLS.PeerCertificates[0], nil
@@ -141,8 +114,13 @@ func (c *CertConnector) ExtractCertificate(r *http.Request) (*x509.Certificate, 
 	return nil, errors.New("no client certificate found")
 }
 
-// ValidateCertificate validates the certificate against the CA pool (implements CertificateConnector)
-func (c *CertConnector) ValidateCertificate(ctx context.Context, cert *x509.Certificate) (identity connector.Identity, err error) {
+// ValidateCertificate validates the certificate against the CA pool
+func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity connector.Identity, err error) {
+	if cert == nil {
+		c.logger.Error("certificate validation failed", "error", "Certificate is nil")
+		return identity, fmt.Errorf("certificate validation failed: Certificate is nil")
+	}
+
 	// Verify the certificate
 	_, err = cert.Verify(x509.VerifyOptions{
 		Roots: c.clientCA,
