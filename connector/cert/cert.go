@@ -3,7 +3,6 @@ package cert
 import (
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -97,13 +96,9 @@ func (c *CertConnector) ExtractCertificate(r *http.Request) (cert *x509.Certific
 		if certHeader != "" {
 			certData, err := base64.StdEncoding.DecodeString(certHeader)
 			if err != nil {
-				return nil, errors.New("failed decoding certificate PEM")
+				return nil, errors.New("failed decoding certificate")
 			}
-			block, _ := pem.Decode([]byte(certData))
-			if block == nil {
-				return nil, errors.New("failed to parse certificate PEM")
-			}
-			cert, err := x509.ParseCertificate(block.Bytes)
+			cert, err := x509.ParseCertificate(certData)
 			if err != nil {
 				return nil, fmt.Errorf("failed to parse certificate: %v", err)
 			}

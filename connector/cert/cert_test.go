@@ -90,9 +90,8 @@ func TestExtractValidateCertificate(t *testing.T) {
 	})
 	// Test with valid certificate in header
 	t.Run("ValidCertificateInHeader", func(t *testing.T) {
-		certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Raw})
 		req := httptest.NewRequest("GET", "/callback", nil)
-		req.Header.Set("X-Client-Cert", base64.StdEncoding.EncodeToString(certPEM))
+		req.Header.Set("X-Client-Cert", base64.StdEncoding.EncodeToString(clientCert.Raw))
 
 		cert, err := certConnector.ExtractCertificate(req)
 		assert.NoError(t, err, "ExtractCertificate failed")
