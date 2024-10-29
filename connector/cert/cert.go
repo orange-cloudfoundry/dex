@@ -14,9 +14,9 @@ import (
 
 type Config struct {
 	// ClientCAPath is the path of the CA certificate used to validate client certificates
-	ClientCAPath         string `json:"clientCAPath"`
+	ClientCAPath string `json:"clientCAPath"`
 	// CertHeader is the name of the HTTP header containing the client certificate (if using a proxy)
-	CertHeader           string `json:"certHeader"`
+	CertHeader string `json:"certHeader"`
 
 	UserIDKey            string `json:"userIDKey"`
 	UserNameKey          string `json:"userNameKey"`
@@ -34,10 +34,6 @@ type CertConnector struct {
 	groupKey             string
 	logger               *slog.Logger
 }
-
-var (
-	_ connector.CertificateConnector = (*CertConnector)(nil)
-)
 
 // loadCACert loads the CA certificate from the file
 func loadCACert(caCertFile string) (*x509.CertPool, error) {
@@ -66,7 +62,7 @@ func (c *Config) Open(id string, logger *slog.Logger) (connector.Connector, erro
 		return nil, fmt.Errorf("failed to load CA certificate: %v", err)
 	}
 
-	return &CertConnector {
+	return &CertConnector{
 		clientCA:             clientCA,
 		certHeader:           c.CertHeader,
 		userIDKey:            c.UserIDKey,
@@ -118,8 +114,7 @@ func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity co
 
 	// Verify the certificate
 	_, err = cert.Verify(x509.VerifyOptions{
-		Roots: c.clientCA,
-		// TODO maybe more verification options?
+		Roots:     c.clientCA,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	})
 	if err != nil {
@@ -132,7 +127,7 @@ func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity co
 	if c.userIDKey != "" {
 		userID = getValueFromCertificate(cert, c.userIDKey)
 	} else {
-		defaultUserIDKey := "0.9.2342.19200300.100.1.1"  // OID for UID
+		defaultUserIDKey := "0.9.2342.19200300.100.1.1" // OID for UID
 		userID = getValueFromCertificate(cert, defaultUserIDKey)
 	}
 	// safe guard
@@ -167,7 +162,7 @@ func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity co
 	if c.groupKey != "" {
 		groups = append(groups, getValueFromCertificate(cert, c.groupKey))
 	} else {
-		defaultGroupKey := "2.5.4.10"  // OID for Organization
+		defaultGroupKey := "2.5.4.10" // OID for Organization
 		groups = append(groups, getValueFromCertificate(cert, defaultGroupKey))
 	}
 
@@ -181,7 +176,6 @@ func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity co
 		Groups:            groups,
 	}
 
-	c.logger.Info("certificate validation successful", "user", identity, "subject", cert.Subject)
 	return identity, nil
 }
 

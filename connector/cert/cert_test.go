@@ -68,9 +68,9 @@ func TestExtractValidateCertificate(t *testing.T) {
 	caPool.AddCert(caCert)
 
 	certConnector := &CertConnector{
-		clientCA: caPool,
+		clientCA:   caPool,
 		certHeader: "X-Client-Cert",
-		logger: slog.New(slog.NewTextHandler(os.Stdout, nil)),
+		logger:     slog.New(slog.NewTextHandler(os.Stdout, nil)),
 	}
 
 	// Test with valid certificate in TLS
@@ -118,16 +118,16 @@ func generateCACertificate() (*x509.Certificate, *rsa.PrivateKey, error) {
 	caTemplate := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		Subject: pkix.Name{
-			Country: []string{"FR"},
+			Country:      []string{"FR"},
 			Organization: []string{"Orange CA"},
-			CommonName: "Test CA",
+			CommonName:   "Test CA",
 		},
-		NotBefore: time.Now(),
-		NotAfter: time.Now().Add(time.Hour * 24),
-		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(time.Hour * 24),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		IsCA: true,
+		IsCA:                  true,
 	}
 
 	caBytes, err := x509.CreateCertificate(rand.Reader, &caTemplate, &caTemplate, &caPrivKey.PublicKey, caPrivKey)
@@ -152,9 +152,9 @@ func generateClientCertificate(caCert *x509.Certificate, caPrivKey *rsa.PrivateK
 	clientTemplate := x509.Certificate{
 		SerialNumber: big.NewInt(2),
 		Subject: pkix.Name{
-			Country: []string{"FR"},
+			Country:      []string{"FR"},
 			Organization: []string{"Orange"},
-			CommonName: "Test Client",
+			CommonName:   "Test Client",
 			ExtraNames: []pkix.AttributeTypeAndValue{
 				{
 					Type:  []int{0, 9, 2342, 19200300, 100, 1, 1}, // OID for UID
@@ -162,9 +162,9 @@ func generateClientCertificate(caCert *x509.Certificate, caPrivKey *rsa.PrivateK
 				},
 			},
 		},
-		NotBefore: time.Now(),
-		NotAfter: time.Now().Add(time.Hour * 24),
-		KeyUsage: x509.KeyUsageDigitalSignature,
+		NotBefore:   time.Now(),
+		NotAfter:    time.Now().Add(time.Hour * 24),
+		KeyUsage:    x509.KeyUsageDigitalSignature,
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 

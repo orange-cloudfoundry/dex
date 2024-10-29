@@ -860,7 +860,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	case grantTypeTokenExchange:
 		s.withClientFromStorage(w, r, s.handleTokenExchange)
 	case grantTypeCertificate:
-		s.handleCertificateToken(w, r)
+		s.withClientFromStorage(w, r, s.handleCertificateToken)
 	default:
 		s.tokenErrHelper(w, errUnsupportedGrantType, "", http.StatusBadRequest)
 	}
@@ -878,7 +878,7 @@ func (s *Server) calculateCodeChallenge(codeVerifier, codeChallengeMethod string
 	}
 }
 
-func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request, client storage.Client) {
 	if err := r.ParseForm(); err != nil {
 		s.tokenErrHelper(w, errInvalidRequest, "", http.StatusBadRequest)
 		return
@@ -890,9 +890,41 @@ func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request) 
 		s.tokenErrHelper(w, errInvalidRequest, "No nonce provided", http.StatusBadRequest)
 		return
 	}
-	// Some clients, like the old go-oidc, provide extra whitespace. Tolerate this.
+
 	scopes := strings.Fields(q.Get("scope"))
-	// TODO check for unrecognized/invalid scopes
+	// Parse the scopes if they are passed
+	var (
+		unrecognized  []string
+		invalidScopes []string
+	)
+	for _, scope := range scopes {
+		switch scope {
+		case scopeOfflineAccess, scopeEmail, scopeProfile, scopeGroups, scopeFederatedID:
+		default:
+			peerID, ok := parseCrossClientScope(scope)
+			if !ok {
+				unrecognized = append(unrecognized, scope)
+				continue
+			}
+
+			isTrusted, err := s.validateCrossClientTrust(r.Context(), client.ID, peerID)
+			if err != nil {
+				s.tokenErrHelper(w, errInvalidClient, fmt.Sprintf("Error validating cross client trust %v.", err), http.StatusBadRequest)
+				return
+			}
+			if !isTrusted {
+				invalidScopes = append(invalidScopes, scope)
+			}
+		}
+	}
+	if len(unrecognized) > 0 {
+		s.tokenErrHelper(w, errInvalidRequest, fmt.Sprintf("Unrecognized scope(s) %q", unrecognized), http.StatusBadRequest)
+		return
+	}
+	if len(invalidScopes) > 0 {
+		s.tokenErrHelper(w, errInvalidRequest, fmt.Sprintf("Client can't request scope(s) %q", invalidScopes), http.StatusBadRequest)
+		return
+	}
 
 	connID := q.Get("connector_id")
 	if connID == "" {
@@ -925,12 +957,12 @@ func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request) 
 	}
 
 	claims := storage.Claims{
-		UserID: identity.UserID,
-		Username: identity.Username,
+		UserID:            identity.UserID,
+		Username:          identity.Username,
 		PreferredUsername: identity.PreferredUsername,
-		Email: identity.Email,
-		EmailVerified: identity.EmailVerified,
-		Groups: identity.Groups,
+		Email:             identity.Email,
+		EmailVerified:     identity.EmailVerified,
+		Groups:            identity.Groups,
 	}
 
 	accessToken, _, err := s.newAccessToken(r.Context(), q.Get("client_id"), claims, scopes, nonce, connID)
@@ -946,8 +978,6 @@ func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request) 
 		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
 		return
 	}
-
-	// TODO: make refresh token?
 
 	resp := s.toAccessTokenResponse(idToken, accessToken, "", expiry)
 	s.writeAccessToken(w, resp)
