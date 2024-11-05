@@ -844,7 +844,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 
 	grantType := r.PostFormValue("grant_type")
 	if !contains(s.supportedGrantTypes, grantType) {
-		s.logger.ErrorContext(r.Context(), "unsupported grant type", "grant_type", grantType, "supportedGrantTypes", s.supportedGrantTypes)
+		s.logger.ErrorContext(r.Context(), "unsupported grant type", "grant_type", grantType)
 		s.tokenErrHelper(w, errUnsupportedGrantType, "", http.StatusBadRequest)
 		return
 	}
