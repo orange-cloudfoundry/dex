@@ -37,8 +37,8 @@ func TestOpen(t *testing.T) {
 
 	// Create a config with the test CA cert file
 	config := Config{
-		ClientCAPath: caFile.Name(),
-		CertHeader:   "X-Client-Cert",
+		RootCAs:    []string{caFile.Name()},
+		CertHeader: "X-Client-Cert",
 	}
 
 	// Create a logger
@@ -68,7 +68,7 @@ func TestExtractValidateCertificate(t *testing.T) {
 	caPool.AddCert(caCert)
 
 	certConnector := &CertConnector{
-		clientCA:   caPool,
+		rootCAs:    []*x509.CertPool{caPool},
 		certHeader: "X-Client-Cert",
 		logger:     slog.New(slog.NewTextHandler(os.Stdout, nil)),
 	}

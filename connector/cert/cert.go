@@ -13,8 +13,8 @@ import (
 )
 
 type Config struct {
-	// ClientCAPath is the path of the CA certificate used to validate client certificates
-	ClientCAPath string `json:"clientCAPath"`
+	// RootCAs are the paths of the certificates for client certificate validation
+	RootCAs []string `json:"rootCAs"`
 	// CertHeader is the name of the HTTP header containing the client certificate (if using a proxy)
 	CertHeader string `json:"certHeader"`
 
@@ -26,7 +26,7 @@ type Config struct {
 
 // CertConnector implements the CallbackConnector interface
 type CertConnector struct {
-	clientCA             *x509.CertPool
+	rootCAs              []*x509.CertPool
 	certHeader           string
 	userIDKey            string
 	userNameKey          string
@@ -44,7 +44,7 @@ func loadCACert(caCertFile string) (*x509.CertPool, error) {
 	}
 
 	if !clientCA.AppendCertsFromPEM(caCertBytes) {
-		return nil, errors.New("failed to append CA certs from PEM file")
+		return nil, fmt.Errorf("no certs found in root CA file %q", caCertFile)
 	}
 
 	return clientCA, nil
@@ -52,18 +52,21 @@ func loadCACert(caCertFile string) (*x509.CertPool, error) {
 
 // Open initializes the PKI Connector
 func (c *Config) Open(id string, logger *slog.Logger) (connector.Connector, error) {
-	if c.ClientCAPath == "" {
-		return nil, errors.New("missing required config field 'clientCAPath'")
+	if len(c.RootCAs) == 0 {
+		return nil, errors.New("missing required config field 'rootCAs'")
 	}
 
-	// TODO: maybe support multiple CAs
-	clientCA, err := loadCACert(c.ClientCAPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load CA certificate: %v", err)
+	var rootCAs []*x509.CertPool
+	for _, rootCA := range c.RootCAs {
+		pool, err := loadCACert(rootCA)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load CA certificate: %v", err)
+		}
+		rootCAs = append(rootCAs, pool)
 	}
 
 	return &CertConnector{
-		clientCA:             clientCA,
+		rootCAs:              rootCAs,
 		certHeader:           c.CertHeader,
 		userIDKey:            c.UserIDKey,
 		userNameKey:          c.UserNameKey,
@@ -86,7 +89,6 @@ func (c *CertConnector) ExtractCertificate(r *http.Request) (cert *x509.Certific
 	}
 
 	// Check the header (for proxy cases)
-	c.logger.Debug("I have this cerHeader configured", "certHeader", c.certHeader)
 	if c.certHeader != "" {
 		certHeader := r.Header.Get(c.certHeader)
 		if certHeader != "" {
@@ -112,14 +114,27 @@ func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity co
 		return identity, fmt.Errorf("certificate validation failed: Certificate is nil")
 	}
 
-	// Verify the certificate
-	_, err = cert.Verify(x509.VerifyOptions{
-		Roots:     c.clientCA,
-		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-	})
-	if err != nil {
-		c.logger.Error("certificate validation failed", "error", err)
-		return identity, fmt.Errorf("certificate validation failed: %v", err)
+	// Verify the certificate against all configured rootCAs
+	// Only one must successfully verifies the client certificate
+	validClientCertificate := true
+	verificationErrors := []error{}
+	for _, rootCA := range c.rootCAs {
+		validClientCertificate = true
+		_, err = cert.Verify(x509.VerifyOptions{
+			Roots:     rootCA,
+			KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		})
+		if err != nil {
+			validClientCertificate = false
+			verificationErrors = append(verificationErrors, err)
+		}
+		if validClientCertificate {
+			break
+		}
+	}
+	if !validClientCertificate {
+		c.logger.Error("certificate validation failed", "errors", verificationErrors)
+		return identity, fmt.Errorf("certificate validation failed: %v", verificationErrors)
 	}
 
 	// Extract value to be used as userID from certificate
