@@ -897,8 +897,11 @@ func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request, 
 		unrecognized  []string
 		invalidScopes []string
 	)
+	hasOpenIDScope := false
 	for _, scope := range scopes {
 		switch scope {
+		case scopeOpenID:
+			hasOpenIDScope = true
 		case scopeOfflineAccess, scopeEmail, scopeProfile, scopeGroups, scopeFederatedID:
 		default:
 			peerID, ok := parseCrossClientScope(scope)
@@ -916,6 +919,10 @@ func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request, 
 				invalidScopes = append(invalidScopes, scope)
 			}
 		}
+	}
+	if !hasOpenIDScope {
+		s.tokenErrHelper(w, errInvalidRequest, `Missing required scope(s) ["openid"].`, http.StatusBadRequest)
+		return
 	}
 	if len(unrecognized) > 0 {
 		s.tokenErrHelper(w, errInvalidRequest, fmt.Sprintf("Unrecognized scope(s) %q", unrecognized), http.StatusBadRequest)
