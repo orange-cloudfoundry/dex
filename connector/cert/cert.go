@@ -56,7 +56,7 @@ func (c *Config) Open(id string, logger *slog.Logger) (connector.Connector, erro
 		return nil, errors.New("missing required config field 'rootCAs'")
 	}
 
-	var rootCAs []*x509.CertPool
+	rootCAs := []*x509.CertPool{}
 	for _, rootCA := range c.RootCAs {
 		pool, err := loadCACert(rootCA)
 		if err != nil {
