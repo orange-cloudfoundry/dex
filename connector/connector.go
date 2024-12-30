@@ -3,6 +3,7 @@ package connector
 
 import (
 	"context"
+	"crypto/x509"
 	"net/http"
 )
 
@@ -36,6 +37,14 @@ type Identity struct {
 	//
 	// This data is never shared with end users, OAuth clients, or through the API.
 	ConnectorData []byte
+}
+
+type CertificateConnector interface {
+	// ExtractCertificate retrueves the ckuebt certificate from the request
+	ExtractCertificate(r *http.Request) (cert *x509.Certificate, err error)
+
+	// ValidateCertificate checks the provided certificate and returns an Identity
+	ValidateCertificate(cert *x509.Certificate) (identity Identity, err error)
 }
 
 // PasswordConnector is an interface implemented by connectors which take a

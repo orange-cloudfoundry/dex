@@ -33,6 +33,7 @@ import (
 	"github.com/dexidp/dex/connector/atlassiancrowd"
 	"github.com/dexidp/dex/connector/authproxy"
 	"github.com/dexidp/dex/connector/bitbucketcloud"
+	"github.com/dexidp/dex/connector/cert"
 	"github.com/dexidp/dex/connector/gitea"
 	"github.com/dexidp/dex/connector/github"
 	"github.com/dexidp/dex/connector/gitlab"
@@ -236,6 +237,7 @@ func newServer(ctx context.Context, c Config, rotationStrategy rotationStrategy)
 		grantTypeRefreshToken:      true,
 		grantTypeDeviceCode:        true,
 		grantTypeTokenExchange:     true,
+		grantTypeCertificate:       true,
 	}
 	supportedRes := make(map[string]bool)
 
@@ -640,6 +642,7 @@ var ConnectorsConfig = map[string]func() ConnectorConfig{
 	"bitbucket-cloud": func() ConnectorConfig { return new(bitbucketcloud.Config) },
 	"openshift":       func() ConnectorConfig { return new(openshift.Config) },
 	"atlassian-crowd": func() ConnectorConfig { return new(atlassiancrowd.Config) },
+	"cert":            func() ConnectorConfig { return new(cert.Config) },
 	// Keep around for backwards compatibility.
 	"samlExperimental": func() ConnectorConfig { return new(saml.Config) },
 }
