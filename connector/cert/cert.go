@@ -115,7 +115,7 @@ func (c *CertConnector) ValidateCertificate(cert *x509.Certificate) (identity co
 	}
 
 	// Verify the certificate against all configured rootCAs
-	// Only one must successfully verifies the client certificate
+	// Only one must successfully verify the client certificate
 	validClientCertificate := true
 	verificationErrors := []error{}
 	for _, rootCA := range c.rootCAs {
