@@ -751,11 +751,12 @@ type DeviceRequest struct {
 	k8sapi.TypeMeta   `json:",inline"`
 	k8sapi.ObjectMeta `json:"metadata,omitempty"`
 
-	DeviceCode   string    `json:"device_code,omitempty"`
-	ClientID     string    `json:"client_id,omitempty"`
-	ClientSecret string    `json:"client_secret,omitempty"`
-	Scopes       []string  `json:"scopes,omitempty"`
-	Expiry       time.Time `json:"expiry"`
+	DeviceCode   string            `json:"device_code,omitempty"`
+	ClientID     string            `json:"client_id,omitempty"`
+	ClientSecret string            `json:"client_secret,omitempty"`
+	Scopes       []string          `json:"scopes,omitempty"`
+	Expiry       time.Time         `json:"expiry"`
+	ExtraParams  map[string]string `json:"extra_params,omitempty"`
 }
 
 // DeviceRequestList is a list of DeviceRequests.
@@ -780,6 +781,7 @@ func (cli *client) fromStorageDeviceRequest(a storage.DeviceRequest) DeviceReque
 		ClientSecret: a.ClientSecret,
 		Scopes:       a.Scopes,
 		Expiry:       a.Expiry,
+		ExtraParams:  a.ExtraParams,
 	}
 	return req
 }
@@ -792,6 +794,7 @@ func toStorageDeviceRequest(req DeviceRequest) storage.DeviceRequest {
 		ClientSecret: req.ClientSecret,
 		Scopes:       req.Scopes,
 		Expiry:       req.Expiry,
+		ExtraParams:  req.ExtraParams,
 	}
 }
 
