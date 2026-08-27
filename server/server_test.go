@@ -1788,7 +1788,7 @@ func TestServerSupportedGrants(t *testing.T) {
 			resGrants: []string{grantTypeAuthorizationCode, grantTypeClientCredentials, grantTypePassword, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
 		},
 		{
-			name:	   "Without client credentials",
+			name: "Without client credentials",
 			config: func(c *Config) {
 				c.AllowedGrantTypes = []string{
 					grantTypeAuthorizationCode,
@@ -1798,7 +1798,7 @@ func TestServerSupportedGrants(t *testing.T) {
 				}
 			},
 			resGrants: []string{grantTypeAuthorizationCode, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
-		},	
+		},
 		{
 			name:      "With token response",
 			config:    func(c *Config) { c.SupportedResponseTypes = append(c.SupportedResponseTypes, responseTypeToken) },
