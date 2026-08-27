@@ -549,6 +549,7 @@ func runVerify(t *testing.T, ca string, resp string, shouldSucceed bool) {
 	s := certStore{[]*x509.Certificate{cert}}
 
 	validator := dsig.NewDefaultValidationContext(s)
+	validator.Clock = dsig.NewFakeClockAt(time.Date(2017, 4, 4, 4, 34, 59, 0, time.UTC))
 
 	data, err := os.ReadFile(resp)
 	if err != nil {
