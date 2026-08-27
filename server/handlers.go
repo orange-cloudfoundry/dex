@@ -859,6 +859,8 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.withClientFromStorage(w, r, s.handlePasswordGrant)
 	case grantTypeTokenExchange:
 		s.withClientFromStorage(w, r, s.handleTokenExchange)
+	case grantTypeCertificate:
+		s.withClientFromStorage(w, r, s.handleCertificateToken)
 	default:
 		s.tokenErrHelper(w, errUnsupportedGrantType, "", http.StatusBadRequest)
 	}
@@ -874,6 +876,118 @@ func (s *Server) calculateCodeChallenge(codeVerifier, codeChallengeMethod string
 	default:
 		return "", fmt.Errorf("unknown challenge method (%v)", codeChallengeMethod)
 	}
+}
+
+func (s *Server) handleCertificateToken(w http.ResponseWriter, r *http.Request, client storage.Client) {
+	if err := r.ParseForm(); err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "", http.StatusBadRequest)
+		return
+	}
+	q := r.Form
+
+	nonce := q.Get("nonce")
+	if nonce == "" {
+		s.tokenErrHelper(w, errInvalidRequest, "No nonce provided", http.StatusBadRequest)
+		return
+	}
+
+	scopes := strings.Fields(q.Get("scope"))
+	// Parse the scopes if they are passed
+	var (
+		unrecognized  []string
+		invalidScopes []string
+	)
+	hasOpenIDScope := false
+	for _, scope := range scopes {
+		switch scope {
+		case scopeOpenID:
+			hasOpenIDScope = true
+		case scopeOfflineAccess, scopeEmail, scopeProfile, scopeGroups, scopeFederatedID:
+		default:
+			peerID, ok := parseCrossClientScope(scope)
+			if !ok {
+				unrecognized = append(unrecognized, scope)
+				continue
+			}
+
+			isTrusted, err := s.validateCrossClientTrust(r.Context(), client.ID, peerID)
+			if err != nil {
+				s.tokenErrHelper(w, errInvalidClient, fmt.Sprintf("Error validating cross client trust %v.", err), http.StatusBadRequest)
+				return
+			}
+			if !isTrusted {
+				invalidScopes = append(invalidScopes, scope)
+			}
+		}
+	}
+	if !hasOpenIDScope {
+		s.tokenErrHelper(w, errInvalidRequest, `Missing required scope(s) ["openid"].`, http.StatusBadRequest)
+		return
+	}
+	if len(unrecognized) > 0 {
+		s.tokenErrHelper(w, errInvalidRequest, fmt.Sprintf("Unrecognized scope(s) %q", unrecognized), http.StatusBadRequest)
+		return
+	}
+	if len(invalidScopes) > 0 {
+		s.tokenErrHelper(w, errInvalidRequest, fmt.Sprintf("Client can't request scope(s) %q", invalidScopes), http.StatusBadRequest)
+		return
+	}
+
+	connID := q.Get("connector_id")
+	if connID == "" {
+		s.tokenErrHelper(w, errInvalidRequest, "No connector_id provided", http.StatusBadRequest)
+		return
+	}
+
+	conn, err := s.getConnector(connID)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Invalid connector_id", http.StatusBadRequest)
+		return
+	}
+
+	certConnector, ok := conn.Connector.(connector.CertificateConnector)
+	if !ok {
+		s.tokenErrHelper(w, errInvalidRequest, "Connector does not support certificate authentication", http.StatusBadRequest)
+		return
+	}
+
+	cert, err := certConnector.ExtractCertificate(r)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Invalid certificate", http.StatusBadRequest)
+		return
+	}
+
+	identity, err := certConnector.ValidateCertificate(cert)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Unable to validate certificate", http.StatusBadRequest)
+		return
+	}
+
+	claims := storage.Claims{
+		UserID:            identity.UserID,
+		Username:          identity.Username,
+		PreferredUsername: identity.PreferredUsername,
+		Email:             identity.Email,
+		EmailVerified:     identity.EmailVerified,
+		Groups:            identity.Groups,
+	}
+
+	accessToken, _, err := s.newAccessToken(r.Context(), q.Get("client_id"), claims, scopes, nonce, connID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "certificate grant failed to create new access token", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	idToken, expiry, err := s.newIDToken(r.Context(), q.Get("client_id"), claims, scopes, nonce, accessToken, "", connID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "certificate grant failed to create new ID token", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	resp := s.toAccessTokenResponse(idToken, accessToken, "", expiry)
+	s.writeAccessToken(w, resp)
 }
 
 // handle an access token request https://tools.ietf.org/html/rfc6749#section-4.1.3
