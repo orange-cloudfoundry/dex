@@ -889,6 +889,8 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		s.withClientFromStorage(w, r, s.handlePasswordGrant)
 	case grantTypeTokenExchange:
 		s.withClientFromStorage(w, r, s.handleTokenExchange)
+	case grantTypeExternalClientCredentials:
+		s.withClientFromStorage(w, r, s.handleExternalClientCredentials)
 	default:
 		s.tokenErrHelper(w, errUnsupportedGrantType, "", http.StatusBadRequest)
 	}

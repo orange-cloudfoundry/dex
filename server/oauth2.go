@@ -137,12 +137,13 @@ const (
 )
 
 const (
-	grantTypeAuthorizationCode = "authorization_code"
-	grantTypeRefreshToken      = "refresh_token"
-	grantTypeImplicit          = "implicit"
-	grantTypePassword          = "password"
-	grantTypeDeviceCode        = "urn:ietf:params:oauth:grant-type:device_code"
-	grantTypeTokenExchange     = "urn:ietf:params:oauth:grant-type:token-exchange"
+	grantTypeAuthorizationCode         = "authorization_code"
+	grantTypeRefreshToken              = "refresh_token"
+	grantTypeImplicit                  = "implicit"
+	grantTypePassword                  = "password"
+	grantTypeDeviceCode                = "urn:ietf:params:oauth:grant-type:device_code"
+	grantTypeTokenExchange             = "urn:ietf:params:oauth:grant-type:token-exchange"
+	grantTypeExternalClientCredentials = "external_client_credentials"
 )
 
 const (

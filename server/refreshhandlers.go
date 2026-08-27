@@ -459,3 +459,64 @@ func (s *Server) handleRefreshToken(w http.ResponseWriter, r *http.Request, clie
 	resp := s.toAccessTokenResponse(idToken, accessToken, rawNewToken, expiry)
 	s.writeAccessToken(w, resp)
 }
+
+func (s *Server) handleExternalClientCredentials(w http.ResponseWriter, r *http.Request, client storage.Client) {
+	// Parse the fields
+	if err := r.ParseForm(); err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Couldn't parse data", http.StatusBadRequest)
+		return
+	}
+	q := r.Form
+
+	scopes := strings.Fields(q.Get("scope"))
+	nonce := ""
+	connID := q.Get("connector_id")
+
+	// Which connector
+	conn, err := s.getConnector(r.Context(), connID)
+	if err != nil {
+		s.tokenErrHelper(w, errInvalidRequest, "Requested connector does not exist.", http.StatusBadRequest)
+		return
+	}
+
+	callbackConnector, ok := conn.Connector.(connector.CallbackConnector)
+	if !ok {
+		s.tokenErrHelper(w, errInvalidRequest, "Requested callback connector does not correct type.", http.StatusBadRequest)
+		return
+	}
+
+	// Callback
+	identity, err := callbackConnector.HandleCallback(parseScopes(scopes), nil, r)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to login user", "err", err)
+		s.tokenErrHelper(w, errInvalidRequest, "Could not login user", http.StatusBadRequest)
+		return
+	}
+
+	// Build the claims to send the id token
+	claims := storage.Claims{
+		UserID:            identity.UserID,
+		Username:          identity.Username,
+		PreferredUsername: identity.PreferredUsername,
+		Email:             identity.Email,
+		EmailVerified:     identity.EmailVerified,
+		Groups:            identity.Groups,
+	}
+
+	accessToken, _, err := s.newAccessToken(r.Context(), client.ID, claims, scopes, nonce, connID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "client grant fialed to create new access token", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	idToken, expiry, err := s.newIDToken(r.Context(), client.ID, claims, scopes, nonce, accessToken, "", connID)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "client grant fialed to create new ID token", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+
+	resp := s.toAccessTokenResponse(idToken, accessToken, "", expiry)
+	s.writeAccessToken(w, resp)
+}

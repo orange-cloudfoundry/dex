@@ -229,10 +229,11 @@ func newServer(ctx context.Context, c Config) (*Server, error) {
 	}
 
 	allSupportedGrants := map[string]bool{
-		grantTypeAuthorizationCode: true,
-		grantTypeRefreshToken:      true,
-		grantTypeDeviceCode:        true,
-		grantTypeTokenExchange:     true,
+		grantTypeAuthorizationCode:         true,
+		grantTypeRefreshToken:              true,
+		grantTypeDeviceCode:                true,
+		grantTypeTokenExchange:             true,
+		grantTypeExternalClientCredentials: true,
 	}
 	supportedRes := make(map[string]bool)
 
