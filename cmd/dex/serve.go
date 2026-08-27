@@ -617,6 +617,10 @@ func applyConfigOverrides(options serveOptions, config *Config) {
 			"urn:ietf:params:oauth:grant-type:token-exchange",
 		}
 	}
+
+	if featureflags.ClientCredentialGrantEnabledByDefault.Enabled() {
+		config.OAuth2.GrantTypes = append(config.OAuth2.GrantTypes, "client_credentials")
+	}
 }
 
 func pprofHandler(router *http.ServeMux) {
