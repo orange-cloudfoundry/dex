@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -486,7 +487,19 @@ func (s *Server) handleExternalClientCredentials(w http.ResponseWriter, r *http.
 	}
 
 	// Callback
-	identity, err := callbackConnector.HandleCallback(parseScopes(scopes), nil, r)
+	customClientID := q.Get("custom_client_id")
+	customClientData := struct {
+		ClientID string `json:"clientID"`
+	}{
+		ClientID: customClientID,
+	}
+	connData, err := json.Marshal(customClientData)
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to marshal custom client data", "err", err)
+		s.tokenErrHelper(w, errServerError, "", http.StatusInternalServerError)
+		return
+	}
+	identity, err := callbackConnector.HandleCallback(parseScopes(scopes), connData, r)
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "failed to login user", "err", err)
 		s.tokenErrHelper(w, errInvalidRequest, "Could not login user", http.StatusBadRequest)

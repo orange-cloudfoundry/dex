@@ -25,6 +25,7 @@ import (
 const (
 	codeChallengeMethodPlain = "plain"
 	codeChallengeMethodS256  = "S256"
+	codeChallengeNoMethod    = "none"
 )
 
 func contains(arr []string, item string) bool {
@@ -250,6 +251,11 @@ type PKCEChallengeData struct {
 	CodeChallengeMethod string `json:"codeChallengeMethod"`
 }
 
+// CustomClientIDData is used to store info for Custom Client ID to be used in the connectorData
+type CustomClientData struct {
+	ClientID string `json:"clientID"`
+}
+
 // Returns an AuthCodeOption according to the provided codeChallengeMethod
 func getAuthCodeOptionForCodeChallenge(codeVerifier, codeChallengeMethod string) (oauth2.AuthCodeOption, error) {
 	switch codeChallengeMethod {
@@ -334,7 +340,7 @@ func (c *Config) Open(id string, logger *slog.Logger) (conn connector.Connector,
 		} else if contains(metadata.CodeChallengeMethodsSupported, codeChallengeMethodPlain) {
 			c.PKCEChallenge = codeChallengeMethodPlain
 		}
-	} else {
+	} else if c.PKCEChallenge != codeChallengeNoMethod {
 		// if PKCEChallenge method has been setted in the config, check if it is supported
 		if !contains(metadata.CodeChallengeMethodsSupported, c.PKCEChallenge) {
 			logger.Warn("provided PKCEChallenge method not supported by the connector")
@@ -543,7 +549,7 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, connData []byte, r *h
 	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, c.httpClient)
 
 	var opts []oauth2.AuthCodeOption
-	if c.pkceChallenge != "" {
+	if c.pkceChallenge != "" && c.pkceChallenge != codeChallengeNoMethod {
 		var data PKCEChallengeData
 		if err := json.Unmarshal(connData, &data); err != nil {
 			return identity, fmt.Errorf("oidc: failed to parse PKCEChallenge data: %v", err)
@@ -567,9 +573,27 @@ func (c *oidcConnector) HandleCallback(s connector.Scopes, connData []byte, r *h
 		if err != nil {
 			return identity, fmt.Errorf("oidc: failed to get token: %v", err)
 		}
+
+		// hack to change the client ID in the verifier (we don't have a better way to do this)
+		var data CustomClientData
+		if err := json.Unmarshal(connData, &data); err != nil {
+			return identity, fmt.Errorf("oidc: failed to parse custom client data: %v", err)
+		}
+		c.verifier = c.provider.VerifierContext(
+			ctx,
+			&oidc.Config{ClientID: data.ClientID},
+		)
 	}
 
-	return c.createIdentity(ctx, identity, token, createCaller)
+	identity, err = c.createIdentity(ctx, identity, token, createCaller)
+
+	// restore the verifier to the original client ID
+	c.verifier = c.provider.VerifierContext(
+		ctx,
+		&oidc.Config{ClientID: c.oauth2Config.ClientID},
+	)
+
+	return identity, err
 }
 
 // Refresh is used to refresh a session with the refresh token provided by the IdP
