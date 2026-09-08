@@ -3,6 +3,7 @@ package connector
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 )
@@ -49,6 +50,14 @@ type Identity struct {
 	//
 	// This data is never shared with end users, OAuth clients, or through the API.
 	ConnectorData []byte
+}
+
+type CertificateConnector interface {
+	// ExtractCertificate extracts the certificate from the request.
+	ExtractCertificate(r *http.Request) (cert *x509.Certificate, err error)
+
+	// ValidateCertificate validates the certificate and returns the identity.
+	ValidateCertificate(cert *x509.Certificate) (identity Identity, err error)
 }
 
 // PasswordConnector is an interface implemented by connectors which take a
