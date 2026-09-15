@@ -115,6 +115,10 @@ body {
   background-image: url(../static/img/microsoft-icon.svg);
 }
 
+.dex-btn-icon--certificate {
+  background-image: url(../static/img/certificate-key-icon.svg);
+}
+
 .dex-btn-text {
   font-weight: 600;
   line-height: 36px;
