@@ -138,6 +138,8 @@ web:
 # Connectors are used to authenticate users against upstream identity providers.
 #
 # See the documentation (https://dexidp.io/docs/connectors/) for further information.
+# Set `hidden: true` on a connector to omit it from the login page's connector
+# picker while keeping it reachable via a direct connector_id link.
 # connectors: []
 
 # Enable the password database.

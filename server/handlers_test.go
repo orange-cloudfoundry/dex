@@ -893,3 +893,49 @@ func setNonEmpty(vals url.Values, key, value string) {
 		vals.Set(key, value)
 	}
 }
+
+func TestHandleAuthorizationHiddenConnectors(t *testing.T) {
+	hideConnector := func(t *testing.T, s *Server, id string) {
+		t.Helper()
+		err := s.storage.UpdateConnector(t.Context(), id, func(old storage.Connector) (storage.Connector, error) {
+			old.Hidden = true
+			return old, nil
+		})
+		require.NoError(t, err)
+	}
+
+	t.Run("single visible connector redirects to it", func(t *testing.T) {
+		httpServer, server := newTestServerMultipleConnectors(t, nil)
+		defer httpServer.Close()
+		hideConnector(t, server, "mock2")
+
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/auth", nil))
+
+		require.Equal(t, http.StatusFound, rr.Code)
+		location := rr.Header().Get("Location")
+		require.Contains(t, location, "/auth/mock")
+		require.NotContains(t, location, "/auth/mock2")
+	})
+
+	t.Run("hidden connector omitted from login page but still directly reachable", func(t *testing.T) {
+		httpServer, server := newTestServerMultipleConnectors(t, func(c *Config) {
+			c.AlwaysShowLoginScreen = true
+		})
+		defer httpServer.Close()
+		hideConnector(t, server, "mock2")
+
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/auth", nil))
+
+		require.Equal(t, http.StatusOK, rr.Code)
+		body := rr.Body.String()
+		require.Contains(t, body, `/auth/mock"`)
+		require.NotContains(t, body, "mock2")
+
+		rr = httptest.NewRecorder()
+		server.ServeHTTP(rr, httptest.NewRequest("GET", "/auth?connector_id=mock2", nil))
+		require.Equal(t, http.StatusFound, rr.Code)
+		require.Contains(t, rr.Header().Get("Location"), "/auth/mock2")
+	})
+}

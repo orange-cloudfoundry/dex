@@ -381,6 +381,9 @@ type Connector struct {
 	// ResourceVersion is the static versioning used to keep track of dynamic configuration
 	// changes to the connector object made by the API calls.
 	ResourceVersion string `json:"resourceVersion"`
+	// Hidden excludes the connector from the login page's connector picker.
+	// It remains usable via a direct connector_id link.
+	Hidden bool `json:"hidden,omitempty"`
 	// Config holds all the configuration information specific to the connector type. Since there
 	// no generic struct we can use for this purpose, it is stored as a byte stream.
 	//
