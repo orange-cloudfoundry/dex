@@ -449,6 +449,10 @@ type Connector struct {
 	Name string `json:"name"`
 	ID   string `json:"id"`
 
+	// Hidden excludes the connector from the login page's connector picker.
+	// It remains usable via a direct connector_id link.
+	Hidden bool `json:"hidden"`
+
 	Config server.ConnectorConfig `json:"config"`
 }
 
@@ -456,9 +460,10 @@ type Connector struct {
 // dynamically determine the type of the connector config.
 func (c *Connector) UnmarshalJSON(b []byte) error {
 	var conn struct {
-		Type string `json:"type"`
-		Name string `json:"name"`
-		ID   string `json:"id"`
+		Type   string `json:"type"`
+		Name   string `json:"name"`
+		ID     string `json:"id"`
+		Hidden bool   `json:"hidden"`
 
 		Config json.RawMessage `json:"config"`
 	}
@@ -501,6 +506,7 @@ func (c *Connector) UnmarshalJSON(b []byte) error {
 		Type:   conn.Type,
 		Name:   conn.Name,
 		ID:     conn.ID,
+		Hidden: conn.Hidden,
 		Config: connConfig,
 	}
 	return nil
@@ -517,6 +523,7 @@ func ToStorageConnector(c Connector) (storage.Connector, error) {
 		ID:     c.ID,
 		Type:   c.Type,
 		Name:   c.Name,
+		Hidden: c.Hidden,
 		Config: data,
 	}, nil
 }
