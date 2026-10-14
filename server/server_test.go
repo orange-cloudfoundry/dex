@@ -108,6 +108,7 @@ func newTestServer(t *testing.T, updateConfig func(c *Config)) (*httptest.Server
 			grantTypeImplicit,
 			grantTypePassword,
 			grantTypeCertificate,
+			grantTypeExternalClientCredentials,
 		},
 		Signer: sig,
 	}
@@ -1775,7 +1776,7 @@ func TestServerSupportedGrants(t *testing.T) {
 		{
 			name:      "Simple",
 			config:    func(c *Config) {},
-			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
+			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeExternalClientCredentials, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
 		},
 		{
 			name:      "Minimal",
@@ -1785,12 +1786,12 @@ func TestServerSupportedGrants(t *testing.T) {
 		{
 			name:      "With password connector",
 			config:    func(c *Config) { c.PasswordConnector = "local" },
-			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypePassword, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
+			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeExternalClientCredentials, grantTypePassword, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
 		},
 		{
 			name:      "With token response",
 			config:    func(c *Config) { c.SupportedResponseTypes = append(c.SupportedResponseTypes, responseTypeToken) },
-			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeImplicit, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
+			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeExternalClientCredentials, grantTypeImplicit, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
 		},
 		{
 			name: "All",
@@ -1798,7 +1799,7 @@ func TestServerSupportedGrants(t *testing.T) {
 				c.PasswordConnector = "local"
 				c.SupportedResponseTypes = append(c.SupportedResponseTypes, responseTypeToken)
 			},
-			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeImplicit, grantTypePassword, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
+			resGrants: []string{grantTypeAuthorizationCode, grantTypeCertificate, grantTypeExternalClientCredentials, grantTypeImplicit, grantTypePassword, grantTypeRefreshToken, grantTypeDeviceCode, grantTypeTokenExchange},
 		},
 	}
 

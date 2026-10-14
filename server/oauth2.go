@@ -137,13 +137,14 @@ const (
 )
 
 const (
-	grantTypeAuthorizationCode = "authorization_code"
-	grantTypeRefreshToken      = "refresh_token"
-	grantTypeImplicit          = "implicit"
-	grantTypePassword          = "password"
-	grantTypeDeviceCode        = "urn:ietf:params:oauth:grant-type:device_code"
-	grantTypeTokenExchange     = "urn:ietf:params:oauth:grant-type:token-exchange"
-	grantTypeCertificate       = "certificate"
+	grantTypeAuthorizationCode         = "authorization_code"
+	grantTypeRefreshToken              = "refresh_token"
+	grantTypeImplicit                  = "implicit"
+	grantTypePassword                  = "password"
+	grantTypeDeviceCode                = "urn:ietf:params:oauth:grant-type:device_code"
+	grantTypeTokenExchange             = "urn:ietf:params:oauth:grant-type:token-exchange"
+	grantTypeCertificate               = "certificate"
+	grantTypeExternalClientCredentials = "client_credentials" // FIXME: replace me by external_client_credentials when including dex's client_credentials grant type
 )
 
 const (

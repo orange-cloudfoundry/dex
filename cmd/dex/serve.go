@@ -611,6 +611,7 @@ func applyConfigOverrides(options serveOptions, config *Config) {
 		config.OAuth2.GrantTypes = []string{
 			"authorization_code",
 			"certificate",
+			"client_credentials", // FIXME: replace me by external_client_credentials grant type including dex's client_credentials
 			"implicit",
 			"password",
 			"refresh_token",
