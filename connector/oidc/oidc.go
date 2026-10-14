@@ -15,6 +15,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 
 	"github.com/dexidp/dex/connector"
 	groups_pkg "github.com/dexidp/dex/pkg/groups"
@@ -379,8 +380,9 @@ func (c *Config) Open(id string, logger *slog.Logger) (conn connector.Connector,
 }
 
 var (
-	_ connector.CallbackConnector = (*oidcConnector)(nil)
-	_ connector.RefreshConnector  = (*oidcConnector)(nil)
+	_ connector.CallbackConnector          = (*oidcConnector)(nil)
+	_ connector.RefreshConnector           = (*oidcConnector)(nil)
+	_ connector.ClientCredentialsConnector = (*oidcConnector)(nil)
 )
 
 type oidcConnector struct {
@@ -470,6 +472,7 @@ const (
 	createCaller caller = iota
 	refreshCaller
 	exchangeCaller
+	clientCredentialsCaller
 )
 
 func (c *oidcConnector) HandleCallback(s connector.Scopes, connData []byte, r *http.Request) (identity connector.Identity, err error) {
@@ -532,10 +535,62 @@ func (c *oidcConnector) TokenIdentity(ctx context.Context, subjectTokenType, sub
 	return c.createIdentity(ctx, identity, token, exchangeCaller)
 }
 
+// LoginWithClientCredentials requests a token from the provider with the client_credentials
+// grant, using the given credentials instead of the configured ones, and builds the identity
+// from the issued access token.
+func (c *oidcConnector) LoginWithClientCredentials(ctx context.Context, s connector.Scopes, clientID, clientSecret string) (connector.Identity, bool, error) {
+	var identity connector.Identity
+
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, c.httpClient)
+
+	cfg := clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURL:     c.oauth2Config.Endpoint.TokenURL,
+		Scopes:       c.oauth2Config.Scopes,
+		AuthStyle:    c.oauth2Config.Endpoint.AuthStyle,
+	}
+	token, err := cfg.Token(ctx)
+	if err != nil {
+		var retrieveErr *oauth2.RetrieveError
+		if errors.As(err, &retrieveErr) && isClientRejected(retrieveErr) {
+			return identity, false, nil
+		}
+		return identity, false, fmt.Errorf("oidc: failed to get token: %v", err)
+	}
+
+	identity, err = c.createIdentity(ctx, identity, token, clientCredentialsCaller)
+	if err != nil {
+		return identity, false, err
+	}
+	return identity, true, nil
+}
+
+// isClientRejected reports whether the provider refused the client credentials,
+// as opposed to failing for another reason (invalid scope, outage, ...).
+func isClientRejected(err *oauth2.RetrieveError) bool {
+	if err.ErrorCode == "invalid_client" || err.ErrorCode == "unauthorized_client" {
+		return true
+	}
+	return err.Response != nil && err.Response.StatusCode == http.StatusUnauthorized
+}
+
 func (c *oidcConnector) createIdentity(ctx context.Context, identity connector.Identity, token *oauth2.Token, caller caller) (connector.Identity, error) {
 	var claims map[string]interface{}
 
-	if rawIDToken, ok := token.Extra("id_token").(string); ok {
+	if caller == clientCredentialsCaller {
+		// The response carries no ID token: claims come from the access token, which must be a JWT
+		// signed by the provider unless the userinfo endpoint is enabled to vouch for it instead.
+		idToken, err := c.provider.Verifier(&oidc.Config{SkipClientIDCheck: true}).Verify(ctx, token.AccessToken)
+		switch {
+		case err == nil:
+			if err := idToken.Claims(&claims); err != nil {
+				return identity, fmt.Errorf("oidc: failed to decode claims: %v", err)
+			}
+		case !c.getUserInfo:
+			return identity, fmt.Errorf("oidc: failed to verify access token: %v", err)
+		}
+	} else if rawIDToken, ok := token.Extra("id_token").(string); ok {
 		idToken, err := c.verifier.Verify(ctx, rawIDToken)
 		if err != nil {
 			return identity, fmt.Errorf("oidc: failed to verify ID Token: %v", err)
@@ -593,6 +648,14 @@ func (c *oidcConnector) createIdentity(ctx context.Context, identity connector.I
 		userNameKey = c.userNameKey
 	}
 	name, found := claims[userNameKey].(string)
+	if !found && caller == clientCredentialsCaller {
+		// Service accounts rarely have a display name.
+		name, _ = claims["preferred_username"].(string)
+		if name == "" {
+			name = subject
+		}
+		found = true
+	}
 	if !found {
 		return identity, fmt.Errorf("missing \"%s\" claim", userNameKey)
 	}
@@ -609,6 +672,8 @@ func (c *oidcConnector) createIdentity(ctx context.Context, identity connector.I
 			break
 		}
 	}
+	// Service accounts have no mailbox.
+	requireEmail := hasEmailScope && caller != clientCredentialsCaller
 
 	var email string
 	emailKey := "email"
@@ -618,7 +683,7 @@ func (c *oidcConnector) createIdentity(ctx context.Context, identity connector.I
 		email, found = claims[emailKey].(string)
 	}
 
-	if !found && hasEmailScope {
+	if !found && requireEmail {
 		return identity, fmt.Errorf("missing email claim, not found \"%s\" key", emailKey)
 	}
 
@@ -626,7 +691,7 @@ func (c *oidcConnector) createIdentity(ctx context.Context, identity connector.I
 	if !found {
 		if c.insecureSkipEmailVerified {
 			emailVerified = true
-		} else if hasEmailScope {
+		} else if requireEmail {
 			return identity, errors.New("missing \"email_verified\" claim")
 		}
 	}

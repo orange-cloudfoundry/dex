@@ -611,6 +611,7 @@ func applyConfigOverrides(options serveOptions, config *Config) {
 		config.OAuth2.GrantTypes = []string{
 			"authorization_code",
 			"certificate",
+			"external_client_credentials",
 			"implicit",
 			"password",
 			"refresh_token",

@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -745,6 +747,169 @@ func TestTokenIdentity(t *testing.T) {
 			// assert identity
 			expectEquals(t, identity.UserID, "subvalue")
 			expectEquals(t, identity.Username, "namevalue")
+		})
+	}
+}
+
+func TestLoginWithClientCredentials(t *testing.T) {
+	const (
+		clientID     = "svc-client"
+		clientSecret = "svc-secret"
+	)
+
+	tests := []struct {
+		name           string
+		token          map[string]interface{}
+		opaqueToken    bool
+		getUserInfo    bool
+		upstreamStatus int
+		upstreamError  string
+		secret         string
+		expectValid    bool
+		expectError    bool
+		expectIdentity connector.Identity
+	}{
+		{
+			name:        "full claims",
+			token:       map[string]interface{}{"sub": "subvalue", "name": "namevalue", "email": "e@example.com", "email_verified": true},
+			secret:      clientSecret,
+			expectValid: true,
+			expectIdentity: connector.Identity{
+				UserID: "subvalue", Username: "namevalue", Email: "e@example.com", EmailVerified: true,
+			},
+		},
+		{
+			name:        "service account without name nor email",
+			token:       map[string]interface{}{"sub": "subvalue", "preferred_username": "service-account-svc"},
+			secret:      clientSecret,
+			expectValid: true,
+			expectIdentity: connector.Identity{
+				UserID: "subvalue", Username: "service-account-svc", PreferredUsername: "service-account-svc",
+			},
+		},
+		{
+			name:        "subject as username",
+			token:       map[string]interface{}{"sub": "subvalue"},
+			secret:      clientSecret,
+			expectValid: true,
+			expectIdentity: connector.Identity{
+				UserID: "subvalue", Username: "subvalue",
+			},
+		},
+		{
+			name:        "opaque access token with userinfo",
+			token:       map[string]interface{}{"sub": "subvalue", "name": "namevalue", "email": "e@example.com", "email_verified": true},
+			opaqueToken: true,
+			getUserInfo: true,
+			secret:      clientSecret,
+			expectValid: true,
+			expectIdentity: connector.Identity{
+				UserID: "subvalue", Username: "namevalue", Email: "e@example.com", EmailVerified: true,
+			},
+		},
+		{
+			name:        "opaque access token without userinfo",
+			token:       map[string]interface{}{"sub": "subvalue"},
+			opaqueToken: true,
+			secret:      clientSecret,
+			expectError: true,
+		},
+		{
+			name:   "wrong secret",
+			token:  map[string]interface{}{"sub": "subvalue"},
+			secret: "wrong",
+		},
+		{
+			name:           "provider refuses credentials",
+			token:          map[string]interface{}{"sub": "subvalue"},
+			secret:         clientSecret,
+			upstreamStatus: http.StatusBadRequest,
+			upstreamError:  "unauthorized_client",
+		},
+		{
+			name:           "provider refuses scope",
+			token:          map[string]interface{}{"sub": "subvalue"},
+			secret:         clientSecret,
+			upstreamStatus: http.StatusBadRequest,
+			upstreamError:  "invalid_scope",
+			expectError:    true,
+		},
+		{
+			name:           "provider failure",
+			token:          map[string]interface{}{"sub": "subvalue"},
+			secret:         clientSecret,
+			upstreamStatus: http.StatusInternalServerError,
+			expectError:    true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Serves discovery, keys, userinfo and signed tokens.
+			idp, err := setupServer(tc.token, false)
+			require.NoError(t, err)
+			defer idp.Close()
+
+			var gotForm url.Values
+			tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.NoError(t, r.ParseForm())
+				gotForm = r.PostForm
+
+				id, secret, ok := r.BasicAuth()
+				if ok {
+					id, _ = url.QueryUnescape(id)
+					secret, _ = url.QueryUnescape(secret)
+				} else {
+					id, secret = r.PostForm.Get("client_id"), r.PostForm.Get("client_secret")
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case tc.upstreamStatus != 0:
+					w.WriteHeader(tc.upstreamStatus)
+					json.NewEncoder(w).Encode(map[string]string{"error": tc.upstreamError})
+				case id != clientID || secret != clientSecret:
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(map[string]string{"error": "invalid_client"})
+				case tc.opaqueToken:
+					json.NewEncoder(w).Encode(map[string]string{"access_token": "opaque", "token_type": "Bearer"})
+				default:
+					res, err := http.Get(idp.URL + "/token")
+					require.NoError(t, err)
+					defer res.Body.Close()
+					_, err = io.Copy(w, res.Body)
+					require.NoError(t, err)
+				}
+			}))
+			defer tokenServer.Close()
+
+			conn, err := newConnector(Config{
+				Issuer:                     idp.URL,
+				ClientID:                   "connector-client",
+				ClientSecret:               "connector-secret",
+				Scopes:                     []string{"profile", "email"},
+				GetUserInfo:                tc.getUserInfo,
+				ProviderDiscoveryOverrides: ProviderDiscoveryOverrides{TokenURL: tokenServer.URL},
+			})
+			require.NoError(t, err)
+
+			identity, valid, err := conn.LoginWithClientCredentials(t.Context(), connector.Scopes{}, clientID, tc.secret)
+			if tc.expectError {
+				require.Error(t, err)
+				require.False(t, valid)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectValid, valid)
+
+			require.Equal(t, "client_credentials", gotForm.Get("grant_type"))
+			require.Equal(t, "openid profile email", gotForm.Get("scope"))
+			if !tc.expectValid {
+				return
+			}
+
+			identity.ConnectorData = nil
+			require.Equal(t, tc.expectIdentity, identity)
 		})
 	}
 }

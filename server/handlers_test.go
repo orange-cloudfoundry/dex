@@ -63,6 +63,7 @@ func TestHandleDiscovery(t *testing.T) {
 		GrantTypes: []string{
 			"authorization_code",
 			"certificate",
+			"external_client_credentials",
 			"refresh_token",
 			"urn:ietf:params:oauth:grant-type:device_code",
 			"urn:ietf:params:oauth:grant-type:token-exchange",

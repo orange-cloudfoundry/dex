@@ -69,6 +69,16 @@ type PasswordConnector interface {
 	Login(ctx context.Context, s Scopes, username, password string) (identity Identity, validPassword bool, err error)
 }
 
+// ClientCredentialsConnector is an interface implemented by connectors which can
+// authenticate a client against the upstream provider with the OAuth2
+// client_credentials grant.
+type ClientCredentialsConnector interface {
+	// LoginWithClientCredentials requests a token from the upstream provider using
+	// the given client credentials and returns the identity it carries.
+	// validCredentials is false when the provider rejected the credentials.
+	LoginWithClientCredentials(ctx context.Context, s Scopes, clientID, clientSecret string) (identity Identity, validCredentials bool, err error)
+}
+
 // CallbackConnector is an interface implemented by connectors which use an OAuth
 // style redirect flow to determine user information.
 type CallbackConnector interface {
