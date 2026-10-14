@@ -144,7 +144,7 @@ const (
 	grantTypeDeviceCode                = "urn:ietf:params:oauth:grant-type:device_code"
 	grantTypeTokenExchange             = "urn:ietf:params:oauth:grant-type:token-exchange"
 	grantTypeCertificate               = "certificate"
-	grantTypeExternalClientCredentials = "external_client_credentials"
+	grantTypeExternalClientCredentials = "client_credentials" // FIXME: replace me by external_client_credentials when including dex's client_credentials grant type
 )
 
 const (
